@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indicador de Eficiencia por Etapa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #161921;
+    --surface2: #1e2230;
+    --surface3: #243044;
+    --border: #2a2f3d;
+    --accent: #00e5ff;
+    --accent2: #2563eb;
+    --blue-dark: #0b3557;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #0d0f14 0%, #162033 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    color: #001018;
+  }
+  .header h1 {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .header p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .container { max-width: 1800px; margin: 0 auto; padding: 24px 32px; }
+
+  .upload-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 16px;
+    margin-bottom: 18px;
+    align-items: end;
+  }
+  .upload-card {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: pointer;
+  }
+  .upload-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .upload-card.loaded { border-color: var(--green); border-style: solid; }
+  .upload-card label {
+    font-size: 11px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .upload-card .file-name {
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .upload-card.loaded .file-name { color: var(--green); }
+  .upload-card input[type="file"] { display: none; }
+  .upload-btn-label { display: flex; align-items: center; gap: 10px; }
+  .upload-icon { font-size: 24px; }
+
+  .btn {
+    background: linear-gradient(135deg, var(--accent), #00b4cc);
+    color: #001018;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    padding: 8px 14px;
+  }
+
+  .message {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: none;
+  }
+  .message.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+  .message.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+  .message.info { background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2); color: var(--accent); }
+  .message.show { display: block; }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin: 18px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .selector-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .selector-title {
+    font-family: var(--mono);
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .stage-buttons, .day-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stage-btn {
+    border: 1px solid #1d4ed8;
+    background: linear-gradient(180deg, #1e5d92, #16456d);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 115px;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25);
+    text-align: center;
+  }
+  .stage-btn .count { display: block; font-family: var(--mono); font-size: 10px; opacity: .82; margin-top: 2px; }
+  .stage-btn.active { outline: 2px solid var(--accent); background: linear-gradient(180deg, #16a34a, #0f766e); }
+
+  .day-btn {
+    background: #f8fafc;
+    color: #111827;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 14px;
+    min-width: 112px;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.18);
+  }
+  .day-btn .date { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; }
+  .day-btn.active { background: #2876b7; color: #fff; border-color: #2876b7; }
+  .hint { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1400px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 800px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .upload-section { grid-template-columns: 1fr; } }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .kpi-label { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 8px; }
+  .kpi-value { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .chart-card h3 { font-size: 12px; font-family: var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  .ranking-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .ranking-grid { grid-template-columns: 1fr; } }
+  .ranking-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .ranking-card.worst { border-color: rgba(239,68,68,0.35); }
+  .ranking-card.best { border-color: rgba(16,185,129,0.35); }
+  .ranking-title { padding: 14px 16px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .ranking-card.worst .ranking-title { color: #fca5a5; }
+  .ranking-card.best .ranking-title { color: #86efac; }
+  .ranking-list { padding: 10px 12px; display: grid; gap: 8px; }
+  .rank-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; background: rgba(255,255,255,0.025); border: 1px solid rgba(42,47,61,.55); border-radius: 10px; padding: 10px; }
+  .rank-pos { font-family: var(--mono); font-weight: 700; color: var(--text-muted); text-align: center; }
+  .rank-name { font-weight: 700; color: var(--text); line-height: 1.2; }
+  .rank-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+  .rank-eff { font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 4px 8px; border-radius: 999px; }
+  .rank-empty { padding: 22px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+  .table-header h3 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .table-scroll { overflow: auto; max-height: 560px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { position: sticky; top: 0; z-index: 10; }
+  thead th { background: #0d304e; color: #f8fafc; padding: 8px 10px; text-align: center; font-family: var(--mono); font-size: 10px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.08); }
+  tbody tr { border-bottom: 1px solid rgba(42,47,61,0.6); }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody td { padding: 8px 10px; color: var(--text); border-right: 1px solid rgba(42,47,61,.55); }
+  td.mono { font-family: var(--mono); font-size: 11px; }
+  .left { text-align: left; }
+  .center { text-align: center; }
+  .sticky-col { position: sticky; left: 0; background: var(--surface); z-index: 2; }
+  .sticky-col-2 { position: sticky; left: 110px; background: var(--surface); z-index: 2; }
+  .sticky-col-3 { position: sticky; left: 220px; background: var(--surface); z-index: 2; }
+  thead .sticky-col, thead .sticky-col-2, thead .sticky-col-3 { background: #0d304e; z-index: 12; }
+
+  .hour-cell { min-width: 92px; text-align: center; line-height: 1.25; border-radius: 6px; padding: 6px; }
+  .hour-empty { color: #7890ab; }
+  .eff-main { font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .eff-sub { font-size: 10px; color: rgba(226,232,240,.85); }
+  .eff-green { background: rgba(16,185,129,0.22); color: #86efac; }
+  .eff-yellow { background: rgba(245,158,11,0.22); color: #fde68a; }
+  .eff-red { background: rgba(239,68,68,0.22); color: #fca5a5; }
+  .badge-eff { display: inline-block; padding: 3px 8px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+  .badge-yellow { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+  .error-card { background: var(--surface); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+  .error-card .table-header { border-color: rgba(239,68,68,0.2); }
+  .error-card .table-header h3 { color: #fca5a5; }
+
+  .empty-state { text-align: center; padding: 52px 20px; color: var(--text-muted); }
+  .empty-state .empty-icon { font-size: 42px; margin-bottom: 14px; opacity: 0.45; }
+  .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(13,15,20,0.86); z-index: 999; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .progress-bar-wrap { background: var(--border); border-radius: 4px; height: 4px; margin-top: 8px; overflow: hidden; width: 240px; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; transition: width 0.3s; }
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Ajuste de matriz: evita que columnas fijas tapen Total Und. y mantiene scroll horizontal */
+  #mainTable { min-width: 1900px; table-layout: auto; }
+  #mainTable th, #mainTable td { vertical-align: middle; }
+  .sticky-col { left: 0; min-width: 130px; width: 130px; }
+  .sticky-col-2 { left: 130px; min-width: 160px; width: 160px; }
+  .sticky-col-3 { left: 290px; min-width: 190px; width: 190px; }
+  .col-units { min-width: 110px; width: 110px; }
+  .col-minutes { min-width: 125px; width: 125px; }
+  .col-labor { min-width: 110px; width: 110px; }
+  .col-eff-final { min-width: 135px; width: 135px; }
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Procesando...</div>
+  <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+</div>
+
+<div class="header">
+  <div class="header-icon">⚡</div>
+  <div>
+    <h1>Indicador de Eficiencia por Etapa</h1>
+    <p>Selecciona primero una etapa y luego un día para ver la eficiencia por hora</p>
+  </div>
+</div>
+
+<div class="container">
+  <div class="upload-section">
+    <div class="upload-card" id="card1" onclick="document.getElementById('file1').click()">
+      <label>Archivo 1 - Detalle de escaneos</label>
+      <div class="upload-btn-label"><div class="upload-icon">📂</div><div class="file-name" id="fname1">Haz clic para seleccionar el archivo Excel</div></div>
+      <input type="file" id="file1" accept=".xlsx,.xls,.csv" onchange="handleFile(1, this)">
+    </div>
+    <div class="upload-card" id="card2" onclick="document.getElementById('file2').click()">
+      <label>Archivo 2 - Rutas activas</label>
+      <div class="upload-btn-label"><div class="upload-icon">📂</div><div class="file-name" id="fname2">Haz clic para seleccionar el archivo Excel</div></div>
+      <input type="file" id="file2" accept=".xlsx,.xls,.csv" onchange="handleFile(2, this)">
+    </div>
+    <button class="btn" id="btnProcess" onclick="processData()" disabled>⚡ Procesar</button>
+  </div>
+
+  <div class="message" id="msgBox"></div>
+
+  <div class="section-label">1. Selecciona etapa</div>
+  <div class="selector-panel">
+    <div class="selector-title">Etapas detectadas en el detalle de escaneos</div>
+    <div class="stage-buttons" id="stageButtons"><div class="hint">Carga y procesa los archivos para desplegar las etapas.</div></div>
+  </div>
+
+  <div class="section-label">2. Selecciona día</div>
+  <div class="selector-panel">
+    <div class="selector-title" id="daySelectorTitle">Días disponibles para la etapa seleccionada</div>
+    <div class="day-buttons" id="dayButtons"><div class="hint">Primero selecciona una etapa.</div></div>
+  </div>
+
+  <div class="kpi-grid" id="kpiSection">
+    <div class="kpi-card"><div class="kpi-label">Etapa</div><div class="kpi-value" style="font-size:15px" id="kpiStage">—</div><div class="kpi-sub">Seleccionada</div></div>
+    <div class="kpi-card"><div class="kpi-label">Día</div><div class="kpi-value" style="font-size:15px" id="kpiDay">—</div><div class="kpi-sub">Seleccionado</div></div>
+    <div class="kpi-card"><div class="kpi-label">Eficiencia</div><div class="kpi-value" id="kpiEff">—</div><div class="kpi-sub">Promedio del día</div></div>
+    <div class="kpi-card"><div class="kpi-label">Unidades</div><div class="kpi-value" id="kpiUnits">—</div><div class="kpi-sub">Total</div></div>
+    <div class="kpi-card"><div class="kpi-label">Min. Ganados</div><div class="kpi-value" id="kpiMinutes">—</div><div class="kpi-sub">Total</div></div>
+    <div class="kpi-card"><div class="kpi-label">Escaneos</div><div class="kpi-value" id="kpiScans">—</div><div class="kpi-sub">Procesados</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sin SAM</div><div class="kpi-value" style="color:var(--red)" id="kpiNoSam">—</div><div class="kpi-sub">Etapa / día</div></div>
+    <div class="kpi-card"><div class="kpi-label">Top Operario</div><div class="kpi-value" style="font-size:13px;line-height:1.25" id="kpiTop">—</div><div class="kpi-sub" id="kpiTopSub">Mayor eficiencia</div></div>
+  </div>
+
+
+
+  <div class="section-label">Ranking de operarios</div>
+  <div class="ranking-grid" id="rankingSection">
+    <div class="ranking-card worst">
+      <div class="ranking-title"><span>5 peores eficiencias</span><span>Menor → mayor</span></div>
+      <div class="ranking-list" id="worstRanking"><div class="rank-empty">Selecciona etapa y día para ver el ranking.</div></div>
+    </div>
+    <div class="ranking-card best">
+      <div class="ranking-title"><span>5 mejores eficiencias</span><span>Mayor → menor</span></div>
+      <div class="ranking-list" id="bestRanking"><div class="rank-empty">Selecciona etapa y día para ver el ranking.</div></div>
+    </div>
+  </div>
+
+  <div class="charts-grid" id="chartsSection">
+    <div class="chart-card"><h3>Eficiencia por hora (%)</h3><div class="chart-wrap"><canvas id="chartHora"></canvas></div></div>
+    <div class="chart-card"><h3>Eficiencia por operario (%)</h3><div class="chart-wrap"><canvas id="chartOperario"></canvas></div></div>
+  </div>
+
+  <div class="section-label">Indicador por hora</div>
+  <div class="table-card">
+    <div class="table-header">
+      <h3 id="mainTitle">Matriz de eficiencia por etapa / día · ordenada peor → mejor</h3>
+      <div class="table-actions"><button class="btn btn-secondary" onclick="exportCSV('main')">⬇ Exportar vista actual</button></div>
+    </div>
+    <div class="table-scroll">
+      <table id="mainTable">
+        <thead id="mainThead"></thead>
+        <tbody id="mainTbody"><tr><td><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona una etapa y un día para ver la matriz por hora.</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-label">Registros con problemas</div>
+  <div class="error-card">
+    <div class="table-header">
+      <h3 id="errorTableTitle">⚠ Registros excluidos (0)</h3>
+      <div class="table-actions"><button class="btn btn-secondary" onclick="exportCSV('errors')">⬇ Exportar errores</button></div>
+    </div>
+    <div class="table-scroll">
+      <table id="errorTable">
+        <thead><tr><th>Fila</th><th>QR</th><th>Etapa</th><th>Estilo</th><th>ID Operación</th><th>Operación</th><th>Operativo</th><th>Fecha Escaneo</th><th>Motivo</th></tr></thead>
+        <tbody id="errorTbody"><tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div><p>Sin registros con problemas</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let rawEscaneos = [];
+let rawRutas = [];
+let validRecords = [];
+let errorRows = [];
+let stageList = [];
+let selectedStage = '';
+let selectedDate = '';
+let matrixRows = [];
+let dominantStageByOpDate = new Map();
+let chartHr = null;
+let chartOp = null;
+const HOURS = Array.from({length: 13}, (_, i) => i + 6); // 06h a 18h
+
+function handleFile(num, input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fname' + num).textContent = file.name;
+  document.getElementById('card' + num).classList.add('loaded');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary', cellDates: false });
+      if (num === 1) {
+        const sheetName = wb.SheetNames.includes('Export') ? 'Export' : wb.SheetNames[0];
+        rawEscaneos = sheetToObjectsAuto(wb.Sheets[sheetName], ['Fecha Escaneo', 'Etapa', 'Estilo']);
+        showMsg('info', `Archivo de escaneos cargado: ${rawEscaneos.length} registros desde "${sheetName}".`);
+      } else {
+        const sheetName = wb.SheetNames.find(n => normHeader(n).includes('dp070') || normHeader(n).includes('rutas')) || wb.SheetNames[0];
+        rawRutas = sheetToObjectsAuto(wb.Sheets[sheetName], ['Estilo', 'ID Operación', 'SAM']);
+        showMsg('info', `Archivo de rutas cargado: ${rawRutas.length} registros desde "${sheetName}".`);
+      }
+    } catch (err) {
+      showMsg('error', `Error al leer archivo ${num}: ${err.message}`);
+    }
+    document.getElementById('btnProcess').disabled = !(rawEscaneos.length && rawRutas.length);
+  };
+  reader.readAsBinaryString(file);
+}
+
+function sheetToObjectsAuto(sheet, expectedHeaders = []) {
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  const expected = expectedHeaders.map(h => normHeader(h));
+  let headerIndex = 0;
+  let bestScore = -1;
+
+  rows.slice(0, 15).forEach((row, idx) => {
+    const normalizedRow = row.map(c => normHeader(c));
+    let score = 0;
+    expected.forEach(h => {
+      if (normalizedRow.includes(h)) score += 3;
+      else if (normalizedRow.some(c => c && (c.includes(h) || h.includes(c)))) score += 1;
+    });
+    if (score > bestScore) { bestScore = score; headerIndex = idx; }
+  });
+
+  const headers = (rows[headerIndex] || []).map(h => String(h || '').trim());
+  return rows.slice(headerIndex + 1)
+    .filter(row => row.some(v => v !== '' && v !== null && v !== undefined))
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { if (h) obj[h] = row[i] ?? ''; });
+      return obj;
+    });
+}
+
+function normHeader(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+function norm(s) { return normHeader(s); }
+function normalizeId(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const n = Number(s);
+  if (!isNaN(n) && isFinite(n)) return String(Math.trunc(n));
+  return norm(s).replace(/\.0$/, '');
+}
+function findColumn(cols, exactNames = [], containsNames = []) {
+  const exact = exactNames.map(normHeader);
+  const contains = containsNames.map(normHeader);
+  let col = cols.find(c => exact.includes(normHeader(c)));
+  if (col) return col;
+  col = cols.find(c => contains.some(x => normHeader(c).includes(x)));
+  return col;
+}
+function findSamColumn(cols) {
+  // Evita usar "ID SAM" como SAM.
+  return cols.find(c => normHeader(c) === 'sam') || cols.find(c => ['sam minuto', 'sam minutos'].includes(normHeader(c)));
+}
+function parseNumber(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').replace(',', '.').trim();
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+function parseExcelDate(val) {
+  if (val === '' || val === null || val === undefined) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val === 'number') {
+    // Conversión LOCAL de serial Excel para evitar desfase por zona horaria.
+    // Antes se usaba milisegundos UTC y en Guatemala podía mover la hora 6 horas atrás.
+    const wholeDays = Math.floor(val);
+    const fractionalDay = val - wholeDays;
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(
+      excelEpoch.getFullYear(),
+      excelEpoch.getMonth(),
+      excelEpoch.getDate() + wholeDays,
+      0, 0, 0, 0
+    );
+    const totalSeconds = Math.round(fractionalDay * 86400);
+    date.setSeconds(totalSeconds);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  const s = String(val).trim();
+  if (!s) return null;
+  const direct = new Date(s);
+  if (!isNaN(direct.getTime())) return direct;
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?/);
+  if (m) {
+    const year = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+    return new Date(year, parseInt(m[2], 10) - 1, parseInt(m[1], 10), parseInt(m[4] || 0, 10), parseInt(m[5] || 0, 10), parseInt(m[6] || 0, 10));
+  }
+  return null;
+}
+function formatDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function formatDMY(dateStr) { const [y,m,d] = dateStr.split('-'); return `${d}/${m}/${y}`; }
+function formatDateTime(d) { return `${formatDate(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function dayName(dateStr) {
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const names = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  return names[new Date(y, m - 1, d).getDay()];
+}
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function buildSamMap(rutas) {
+  const cols = rutas.length ? Object.keys(rutas[0]) : [];
+  const colEstilo = findColumn(cols, ['Estilo'], ['estilo']);
+  const colEtapa = findColumn(cols, ['Etapa'], ['etapa']);
+  const colIdOp = findColumn(cols, ['ID Operación', 'ID Operacion'], ['id operacion', 'id_operacion', 'idoperacion', 'id op']);
+  const colOpNom = findColumn(cols, ['Operación', 'Operacion'], ['operacion', 'operation']);
+  const colSam = findSamColumn(cols);
+
+  if (!colEstilo || !colSam || (!colIdOp && !colOpNom)) {
+    showMsg('error', `No se encontraron columnas necesarias en Rutas. Detectado: Estilo=${colEstilo || 'NO'}, ID Operación=${colIdOp || 'NO'}, Operación=${colOpNom || 'NO'}, SAM=${colSam || 'NO'}.`);
+    return { valid: false };
+  }
+
+  const byStyleIdStage = new Map();
+  const byStyleId = new Map();
+  const byStyleOpStage = new Map();
+  const byStyleOp = new Map();
+
+  rutas.forEach(r => {
+    const estilo = norm(r[colEstilo]);
+    const etapa = norm(r[colEtapa]);
+    const idOp = normalizeId(r[colIdOp]);
+    const opNom = norm(r[colOpNom]);
+    const sam = parseNumber(r[colSam]);
+    if (!estilo || isNaN(sam) || sam <= 0) return;
+    if (idOp && etapa) byStyleIdStage.set(`${estilo}|${idOp}|${etapa}`, sam);
+    if (idOp) byStyleId.set(`${estilo}|${idOp}`, sam);
+    if (opNom && etapa) byStyleOpStage.set(`${estilo}|${opNom}|${etapa}`, sam);
+    if (opNom) byStyleOp.set(`${estilo}|${opNom}`, sam);
+  });
+
+  return { valid: true, byStyleIdStage, byStyleId, byStyleOpStage, byStyleOp };
+}
+
+async function processData() {
+  if (!rawEscaneos.length || !rawRutas.length) {
+    showMsg('error', 'Carga ambos archivos antes de procesar.');
+    return;
+  }
+  showLoading(true, 'Construyendo mapa de SAM...', 10);
+  await sleep(20);
+
+  const samMap = buildSamMap(rawRutas);
+  if (!samMap.valid) { showLoading(false); return; }
+
+  const cols = rawEscaneos.length ? Object.keys(rawEscaneos[0]) : [];
+  const colQR = findColumn(cols, ['QR'], ['qr']);
+  const colEstilo = findColumn(cols, ['Estilo'], ['estilo', 'style']);
+  const colEtapa = findColumn(cols, ['Etapa'], ['etapa']);
+  const colIdOp = findColumn(cols, ['ID Operación', 'ID Operacion'], ['id operacion', 'id_operacion', 'idoperacion', 'id op']);
+  const colOpNom = findColumn(cols, ['Operación', 'Operacion'], ['operacion', 'operation']);
+  const colFecha = findColumn(cols, ['Fecha Escaneo'], ['fecha escaneo', 'fecha_escaneo', 'fecha', 'date']);
+  const colLinea = findColumn(cols, ['Línea', 'Linea'], ['linea', 'line']);
+  const colCodOp = findColumn(cols, ['Cod Operativo'], ['cod operativo', 'cod_operativo', 'codoperativo', 'codigo operativo']);
+  const colOperativo = findColumn(cols, ['Operativo'], ['operativo', 'operator', 'operario']);
+  const colCantidad = findColumn(cols, ['Cantidad'], ['cantidad', 'qty', 'quantity', 'units']);
+
+  const missing = [];
+  if (!colFecha) missing.push('Fecha Escaneo');
+  if (!colEtapa) missing.push('Etapa');
+  if (!colEstilo) missing.push('Estilo');
+  if (!colCantidad) missing.push('Cantidad');
+  if (!colOperativo) missing.push('Operativo');
+  if (!colOpNom && !colIdOp) missing.push('Operación / ID Operación');
+  if (missing.length) {
+    showLoading(false);
+    showMsg('error', `Columnas no encontradas en detalle de escaneos: ${missing.join(', ')}.`);
+    return;
+  }
+
+  showLoading(true, 'Procesando escaneos y detectando etapas...', 35);
+  await sleep(20);
+  validRecords = [];
+  errorRows = [];
+
+  for (let i = 0; i < rawEscaneos.length; i++) {
+    const r = rawEscaneos[i];
+    const rowNum = i + 2;
+    const fechaObj = parseExcelDate(r[colFecha]);
+    const etapaRaw = String(r[colEtapa] || '').trim();
+    const etapa = norm(etapaRaw);
+    const operativo = String(r[colOperativo] || '').trim();
+    const baseErr = {
+      fila: rowNum,
+      qr: r[colQR] || '',
+      etapa: etapaRaw,
+      estilo: r[colEstilo] || '',
+      idOperacion: r[colIdOp] || '',
+      operacion: r[colOpNom] || '',
+      operativo,
+      fechaRaw: fechaObj ? formatDateTime(fechaObj) : String(r[colFecha] || '')
+    };
+
+    if (!fechaObj) { errorRows.push({...baseErr, motivo: 'Fecha inválida'}); continue; }
+    if (!etapaRaw) { errorRows.push({...baseErr, motivo: 'Etapa vacía'}); continue; }
+    if (!operativo) { errorRows.push({...baseErr, motivo: 'Operario vacío'}); continue; }
+    const hora = fechaObj.getHours();
+    if (hora < 6) { errorRows.push({...baseErr, motivo: 'Escaneo antes de las 6:00 AM'}); continue; }
+
+    let cantidad = parseNumber(r[colCantidad]);
+    if (isNaN(cantidad)) {
+      errorRows.push({...baseErr, motivo: 'Cantidad inválida o vacía (se usó 0)'});
+      cantidad = 0;
+    }
+
+    const estilo = norm(r[colEstilo]);
+    const idOp = normalizeId(r[colIdOp]);
+    const opNom = norm(r[colOpNom]);
+    let sam = null;
+    if (estilo && idOp && etapa) sam = samMap.byStyleIdStage.get(`${estilo}|${idOp}|${etapa}`) ?? null;
+    if (sam === null && estilo && idOp) sam = samMap.byStyleId.get(`${estilo}|${idOp}`) ?? null;
+    if (sam === null && estilo && opNom && etapa) sam = samMap.byStyleOpStage.get(`${estilo}|${opNom}|${etapa}`) ?? null;
+    if (sam === null && estilo && opNom) sam = samMap.byStyleOp.get(`${estilo}|${opNom}`) ?? null;
+
+    if (sam === null) { errorRows.push({...baseErr, motivo: 'SAM no encontrado'}); continue; }
+
+    validRecords.push({
+      fecha: formatDate(fechaObj),
+      fechaHora: fechaObj,
+      hora,
+      etapa: etapaRaw,
+      etapaNorm: etapa,
+      linea: String(r[colLinea] || '').trim(),
+      codOperativo: String(r[colCodOp] || '').trim(),
+      operativo,
+      estilo: String(r[colEstilo] || '').trim(),
+      idOperacion: String(r[colIdOp] || '').trim(),
+      operacion: String(r[colOpNom] || '').trim(),
+      cantidad,
+      sam,
+      minutos: sam * cantidad,
+      qr: r[colQR] || ''
+    });
+  }
+
+  showLoading(true, 'Desplegando etapas...', 80);
+  await sleep(20);
+
+  buildDominantStageAssignments();
+  selectedStage = '';
+  selectedDate = '';
+  matrixRows = [];
+  renderStageButtons();
+  renderDayButtons();
+  clearDashboard();
+  renderErrorTable();
+  showLoading(false);
+  showMsg('success', `✅ Listo. Se detectaron ${stageList.length} etapas. Selecciona una etapa y luego un día.`);
+}
+
+function operatorDayKeyFromParts(fecha, codOperativo, operativo) {
+  return `${fecha}|${norm(codOperativo)}|${norm(operativo)}`;
+}
+function operatorDayKey(r) {
+  return operatorDayKeyFromParts(r.fecha, r.codOperativo, r.operativo);
+}
+function buildDominantStageAssignments() {
+  // Para cada operario y día se define UNA etapa principal.
+  // Si el operario tuvo marcajes en varias etapas, se conserva la etapa donde estuvo más tiempo.
+  // Tiempo = desde la primera hora marcada hasta la última hora marcada dentro de esa etapa.
+  dominantStageByOpDate = new Map();
+  const byOperatorDay = new Map();
+  validRecords.forEach(r => {
+    const key = operatorDayKey(r);
+    if (!byOperatorDay.has(key)) byOperatorDay.set(key, new Map());
+    const byStage = byOperatorDay.get(key);
+    const stageKey = r.etapa;
+    if (!byStage.has(stageKey)) {
+      byStage.set(stageKey, {
+        etapa: r.etapa,
+        etapaNorm: r.etapaNorm,
+        firstHour: r.hora,
+        lastHour: r.hora,
+        scans: 0,
+        minutes: 0
+      });
+    }
+    const st = byStage.get(stageKey);
+    st.firstHour = Math.min(st.firstHour, r.hora);
+    st.lastHour = Math.max(st.lastHour, r.hora);
+    st.scans += 1;
+    st.minutes += r.minutos;
+  });
+
+  byOperatorDay.forEach((byStage, key) => {
+    const stages = [...byStage.values()].map(st => ({
+      ...st,
+      laborHours: Math.max(1, st.lastHour - st.firstHour + 1)
+    }));
+    stages.sort((a, b) =>
+      (b.laborHours - a.laborHours) ||
+      (b.minutes - a.minutes) ||
+      (b.scans - a.scans) ||
+      a.etapa.localeCompare(b.etapa, 'es')
+    );
+    dominantStageByOpDate.set(key, stages[0]);
+  });
+}
+function isDominantRecord(r) {
+  const dominant = dominantStageByOpDate.get(operatorDayKey(r));
+  return dominant && dominant.etapa === r.etapa;
+}
+function renderStageButtons() {
+  const counts = new Map();
+  validRecords.filter(isDominantRecord).forEach(r => counts.set(r.etapa, (counts.get(r.etapa) || 0) + 1));
+  stageList = [...counts.keys()].sort((a,b) => a.localeCompare(b, 'es'));
+  const cont = document.getElementById('stageButtons');
+  if (!stageList.length) {
+    cont.innerHTML = '<div class="hint">No se detectaron etapas con registros válidos después de unificar operarios por etapa dominante.</div>';
+    return;
+  }
+  cont.innerHTML = stageList.map(stage => `
+    <button class="stage-btn ${stage === selectedStage ? 'active' : ''}" onclick="selectStage('${jsEsc(stage)}')">
+      ${esc(stage)}<span class="count">${counts.get(stage).toLocaleString()} escaneos</span>
+    </button>`).join('');
+}
+function jsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' '); }
+function selectStage(stage) {
+  selectedStage = stage;
+  selectedDate = '';
+  matrixRows = [];
+  renderStageButtons();
+  renderDayButtons();
+  clearDashboard();
+  showMsg('info', `Etapa seleccionada: ${stage}. Ahora selecciona un día.`);
+}
+function renderDayButtons() {
+  const cont = document.getElementById('dayButtons');
+  document.getElementById('daySelectorTitle').textContent = selectedStage ? `Días disponibles para: ${selectedStage}` : 'Días disponibles para la etapa seleccionada';
+  if (!selectedStage) {
+    cont.innerHTML = '<div class="hint">Primero selecciona una etapa.</div>';
+    return;
+  }
+  const days = [...new Set(validRecords.filter(r => r.etapa === selectedStage && isDominantRecord(r)).map(r => r.fecha))].sort();
+  if (!days.length) {
+    cont.innerHTML = '<div class="hint">Esta etapa no tiene días disponibles.</div>';
+    return;
+  }
+  cont.innerHTML = days.map(d => `
+    <button class="day-btn ${d === selectedDate ? 'active' : ''}" onclick="selectDay('${d}')">
+      ${dayName(d)}<span class="date">${formatDMY(d)}</span>
+    </button>`).join('');
+}
+function selectDay(dateStr) {
+  selectedDate = dateStr;
+  renderDayButtons();
+  calculateCurrentView();
+  renderKPIs();
+  renderRanking();
+  renderMatrixTable();
+  renderCharts();
+  renderErrorTable();
+  showHourSummary();
+}
+
+function showHourSummary() {
+  const records = getCurrentRecords();
+  if (!records.length) return;
+  const counts = {};
+  records.forEach(r => { counts[r.hora] = (counts[r.hora] || 0) + 1; });
+  const resumen = HOURS
+    .filter(h => counts[h])
+    .map(h => `${String(h).padStart(2,'0')}h: ${counts[h].toLocaleString()}`)
+    .join(' | ');
+  showMsg('info', `Horas detectadas para ${selectedStage} / ${formatDMY(selectedDate)}: ${resumen}`);
+}
+function getCurrentRecords() {
+  return validRecords.filter(r => r.etapa === selectedStage && r.fecha === selectedDate && HOURS.includes(r.hora) && isDominantRecord(r));
+}
+function getCurrentErrors() {
+  return errorRows.filter(e => (!selectedStage || e.etapa === selectedStage) && (!selectedDate || String(e.fechaRaw || '').startsWith(selectedDate)));
+}
+function calculateCurrentView() {
+  const records = getCurrentRecords();
+  const groups = new Map();
+  records.forEach(r => {
+    // Unifica al operario en UNA sola fila aunque marque en varias operaciones o líneas.
+    // La llave principal es el código de operario + nombre. Si no hay código, usa el nombre.
+    const opKey = `${norm(r.codOperativo)}|${norm(r.operativo)}`;
+    const key = opKey.trim() !== '|' ? opKey : norm(r.operativo);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        lineas: new Set(),
+        codigos: new Set(),
+        operativo: r.operativo,
+        totalUnits: 0,
+        totalMinutes: 0,
+        scans: 0,
+        firstHour: r.hora,
+        lastHour: r.hora,
+        firstMark: r.fechaHora,
+        lastMark: r.fechaHora,
+        hours: {}
+      });
+    }
+    const g = groups.get(key);
+    if (r.linea) g.lineas.add(r.linea);
+    if (r.codOperativo) g.codigos.add(r.codOperativo);
+    if (!g.operativo && r.operativo) g.operativo = r.operativo;
+    g.totalUnits += r.cantidad;
+    g.totalMinutes += r.minutos;
+    g.scans += 1;
+    g.firstHour = Math.min(g.firstHour, r.hora);
+    g.lastHour = Math.max(g.lastHour, r.hora);
+    if (r.fechaHora < g.firstMark) g.firstMark = r.fechaHora;
+    if (r.fechaHora > g.lastMark) g.lastMark = r.fechaHora;
+    if (!g.hours[r.hora]) g.hours[r.hora] = { units: 0, minutes: 0, scans: 0, operations: new Set(), lineas: new Set() };
+    g.hours[r.hora].units += r.cantidad;
+    g.hours[r.hora].minutes += r.minutos;
+    g.hours[r.hora].scans += 1;
+    if (r.operacion) g.hours[r.hora].operations.add(r.operacion);
+    if (r.linea) g.hours[r.hora].lineas.add(r.linea);
+  });
+  matrixRows = [...groups.values()].map(g => {
+    g.linea = [...g.lineas].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    g.codOperativo = [...g.codigos].sort((a,b) => String(a).localeCompare(String(b), 'es')).join(', ');
+    // Horas laboradas brutas = desde la hora del primer marcaje hasta la hora del último marcaje, inclusivo.
+    // Ejemplo: primer marcaje 06:20 y último 10:05 => 5 horas brutas: 06,07,08,09,10.
+    // Para el cálculo final se descuenta 1 hora de almuerzo.
+    // Se deja mínimo 1 hora para evitar división entre cero cuando el rango es muy corto.
+    g.grossLaborHours = Math.max(1, g.lastHour - g.firstHour + 1);
+    g.lunchHours = 1;
+    g.laborHours = Math.max(1, g.grossLaborHours - g.lunchHours);
+    g.finalEff = (g.totalMinutes / (60 * g.laborHours)) * 100;
+    g.totalEff = g.finalEff; // El ranking y KPIs usan la eficiencia final neta, descontando almuerzo.
+    HOURS.forEach(h => { if (g.hours[h]) g.hours[h].eff = (g.hours[h].minutes / 60) * 100; });
+    return g;
+  }).sort((a,b) => (a.finalEff - b.finalEff) || (a.operativo || '').localeCompare(b.operativo || '') || (a.linea || '').localeCompare(b.linea || ''));
+}
+function clearDashboard() {
+  ['kpiStage','kpiDay','kpiEff','kpiUnits','kpiMinutes','kpiScans','kpiNoSam','kpiTop'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('kpiTopSub').textContent = 'Mayor eficiencia';
+  document.getElementById('mainTitle').textContent = 'Matriz de eficiencia por etapa / día · ordenada peor → mejor';
+  document.getElementById('mainThead').innerHTML = '';
+  document.getElementById('mainTbody').innerHTML = '<tr><td><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona una etapa y un día para ver la matriz por hora.</p></div></td></tr>';
+  const wr = document.getElementById('worstRanking');
+  const br = document.getElementById('bestRanking');
+  if (wr) wr.innerHTML = '<div class="rank-empty">Selecciona etapa y día para ver el ranking.</div>';
+  if (br) br.innerHTML = '<div class="rank-empty">Selecciona etapa y día para ver el ranking.</div>';
+  if (chartHr) chartHr.destroy();
+  if (chartOp) chartOp.destroy();
+}
+
+function renderRanking() {
+  const worstEl = document.getElementById('worstRanking');
+  const bestEl = document.getElementById('bestRanking');
+  if (!worstEl || !bestEl) return;
+
+  if (!matrixRows.length) {
+    worstEl.innerHTML = '<div class="rank-empty">No hay operarios para la selección actual.</div>';
+    bestEl.innerHTML = '<div class="rank-empty">No hay operarios para la selección actual.</div>';
+    return;
+  }
+
+  const rankedAsc = [...matrixRows].sort((a,b) =>
+    (a.totalEff - b.totalEff) ||
+    (a.operativo || '').localeCompare(b.operativo || '') ||
+    (a.linea || '').localeCompare(b.linea || '')
+  );
+  const rankedDesc = [...rankedAsc].reverse();
+
+  worstEl.innerHTML = rankedAsc.slice(0, 5).map((r, idx) => renderRankRow(r, idx + 1)).join('');
+  bestEl.innerHTML = rankedDesc.slice(0, 5).map((r, idx) => renderRankRow(r, idx + 1)).join('');
+}
+function renderRankRow(r, position) {
+  const cls = badgeClass(r.totalEff).replace('badge-', '');
+  const effStyle = cls === 'green' ? 'background:rgba(16,185,129,0.15);color:#86efac;' : cls === 'yellow' ? 'background:rgba(245,158,11,0.15);color:#fde68a;' : 'background:rgba(239,68,68,0.15);color:#fca5a5;';
+  return `<div class="rank-row">
+    <div class="rank-pos">#${position}</div>
+    <div>
+      <div class="rank-name">${esc(r.operativo)}</div>
+      <div class="rank-meta">${esc(r.linea)} · Cód. ${esc(r.codOperativo)} · Und: ${Math.round(r.totalUnits).toLocaleString()} · Min: ${r.totalMinutes.toFixed(2)} · Hrs calc: ${r.laborHours}</div>
+    </div>
+    <div class="rank-eff" style="${effStyle}">${r.totalEff.toFixed(2)}%</div>
+  </div>`;
+}
+
+function renderKPIs() {
+  const records = getCurrentRecords();
+  const totalUnits = records.reduce((s,r) => s + r.cantidad, 0);
+  const totalMinutes = records.reduce((s,r) => s + r.minutos, 0);
+  const avgEff = matrixRows.length ? (matrixRows.reduce((s,r) => s + r.totalEff, 0) / matrixRows.length) : 0;
+  const noSam = getCurrentErrors().filter(e => e.motivo === 'SAM no encontrado').length;
+  let top = null;
+  matrixRows.forEach(r => { if (!top || r.totalEff > top.totalEff) top = r; });
+
+  document.getElementById('kpiStage').textContent = selectedStage || '—';
+  document.getElementById('kpiDay').textContent = selectedDate ? `${dayName(selectedDate)} ${formatDMY(selectedDate)}` : '—';
+  document.getElementById('kpiEff').textContent = matrixRows.length ? avgEff.toFixed(1) + '%' : '—';
+  document.getElementById('kpiUnits').textContent = totalUnits ? Math.round(totalUnits).toLocaleString() : '0';
+  document.getElementById('kpiMinutes').textContent = totalMinutes ? totalMinutes.toFixed(1) : '0';
+  document.getElementById('kpiScans').textContent = records.length.toLocaleString();
+  document.getElementById('kpiNoSam').textContent = noSam.toLocaleString();
+  document.getElementById('kpiTop').textContent = top ? top.operativo : '—';
+  document.getElementById('kpiTopSub').textContent = top ? `${top.totalEff.toFixed(1)}%` : 'Mayor eficiencia';
+}
+function effClass(eff) { return eff >= 75 ? 'eff-green' : eff >= 60 ? 'eff-yellow' : 'eff-red'; }
+function badgeClass(eff) { return eff >= 75 ? 'badge-green' : eff >= 60 ? 'badge-yellow' : 'badge-red'; }
+function renderMatrixTable() {
+  document.getElementById('mainTitle').textContent = `${selectedStage} - ${dayName(selectedDate)} ${formatDMY(selectedDate)} - eficiencia por hora · operarios unificados por código/nombre · ordenada por eficiencia final menor → mayor`;
+  document.getElementById('mainThead').innerHTML = `<tr>
+    <th class="sticky-col">Línea</th><th class="sticky-col-2">Cód. Operativo</th><th class="sticky-col-3">Operativo</th>
+    <th class="col-units">Total Und.</th><th class="col-minutes">Min. Ganados</th>
+    ${HOURS.map(h => `<th>${String(h).padStart(2,'0')}h</th>`).join('')}
+    <th class="col-labor">Horas Calc.</th><th class="col-eff-final">Eficiencia Final</th>
+  </tr>`;
+  const tbody = document.getElementById('mainTbody');
+  if (!matrixRows.length) {
+    tbody.innerHTML = `<tr><td colspan="${7 + HOURS.length}"><div class="empty-state"><div class="empty-icon">🔍</div><p>No hay registros para esta etapa y día después de unificar por etapa dominante.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = matrixRows.map(r => `
+    <tr>
+      <td class="mono sticky-col center">${esc(r.linea)}</td>
+      <td class="mono sticky-col-2 center">${esc(r.codOperativo)}</td>
+      <td class="sticky-col-3 left">${esc(r.operativo)}</td>
+      <td class="mono center col-units">${Math.round(r.totalUnits).toLocaleString()}</td>
+      <td class="mono center col-minutes">${r.totalMinutes.toFixed(2)}</td>
+      ${HOURS.map(h => renderHourCell(r.hours[h])).join('')}
+      <td class="mono center col-labor" title="Horas brutas: ${r.grossLaborHours} - 1 hora de almuerzo">${r.laborHours}</td>
+      <td class="center col-eff-final"><span class="badge-eff ${badgeClass(r.finalEff)}">${r.finalEff.toFixed(2)}%</span></td>
+    </tr>`).join('');
+}
+function renderHourCell(h) {
+  if (!h) return '<td class="center hour-empty">—</td>';
+  return `<td><div class="hour-cell ${effClass(h.eff)}"><div class="eff-main">${h.eff.toFixed(2)}%</div><div class="eff-sub">Und: ${Math.round(h.units).toLocaleString()}</div><div class="eff-sub">Min: ${h.minutes.toFixed(2)}</div></div></td>`;
+}
+function renderErrorTable() {
+  const rows = getCurrentErrors();
+  document.getElementById('errorTableTitle').textContent = `⚠ Registros excluidos (${rows.length})`;
+  const tbody = document.getElementById('errorTbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div><p>Sin registros con problemas para la selección actual</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(e => `<tr>
+    <td class="mono center">${e.fila}</td><td class="mono center">${esc(e.qr)}</td><td>${esc(e.etapa)}</td><td>${esc(e.estilo)}</td>
+    <td class="mono center">${esc(e.idOperacion)}</td><td>${esc(e.operacion)}</td><td>${esc(e.operativo)}</td><td class="mono center">${esc(e.fechaRaw)}</td>
+    <td><span class="badge-eff badge-red">${esc(e.motivo)}</span></td></tr>`).join('');
+}
+function renderCharts() { renderChartHora(); renderChartOperario(); }
+function renderChartHora() {
+  const byHour = {};
+  HOURS.forEach(h => byHour[h] = { minutes: 0, units: 0 });
+  getCurrentRecords().forEach(r => { if (byHour[r.hora]) { byHour[r.hora].minutes += r.minutos; byHour[r.hora].units += r.cantidad; } });
+  const labels = HOURS.map(h => `${String(h).padStart(2,'0')}h`);
+  const data = HOURS.map(h => parseFloat(((byHour[h].minutes / 60) * 100).toFixed(2)));
+  const colors = data.map(v => v >= 75 ? 'rgba(16,185,129,0.75)' : v >= 60 ? 'rgba(245,158,11,0.75)' : 'rgba(239,68,68,0.75)');
+  if (chartHr) chartHr.destroy();
+  chartHr = new Chart(document.getElementById('chartHora').getContext('2d'), { type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] }, options: chartOptions() });
+}
+function renderChartOperario() {
+  const labels = matrixRows.map(r => r.operativo);
+  const data = matrixRows.map(r => parseFloat(r.totalEff.toFixed(2)));
+  const colors = data.map(v => v >= 75 ? 'rgba(16,185,129,0.75)' : v >= 60 ? 'rgba(245,158,11,0.75)' : 'rgba(239,68,68,0.75)');
+  if (chartOp) chartOp.destroy();
+  chartOp = new Chart(document.getElementById('chartOperario').getContext('2d'), { type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] }, options: chartOptions() });
+}
+function chartOptions() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e2230', borderColor: '#2a2f3d', borderWidth: 1, titleColor: '#00e5ff', bodyColor: '#e2e8f0', callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)}%` } } },
+    scales: { x: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 }, maxRotation: 45 }, grid: { color: '#2a2f3d' } }, y: { ticks: { color: '#94a3b8', font: { family: 'Space Mono', size: 10 }, callback: v => v + '%' }, grid: { color: '#2a2f3d' }, suggestedMin: 0 } }
+  };
+}
+function exportCSV(type) {
+  let headers = [], rows = [], filename = '';
+  if (type === 'main') {
+    headers = ['Etapa','Fecha','Linea','Cod Operativo','Operativo','Total Unidades','Minutos Ganados','Horas Brutas','Hora Almuerzo','Horas Calculadas','Eficiencia Final %', ...HOURS.map(h => `${String(h).padStart(2,'0')}h Eff %`), ...HOURS.map(h => `${String(h).padStart(2,'0')}h Unidades`), ...HOURS.map(h => `${String(h).padStart(2,'0')}h Minutos`)];
+    rows = matrixRows.map(r => [selectedStage, selectedDate, r.linea, r.codOperativo, r.operativo, Math.round(r.totalUnits), r.totalMinutes.toFixed(4), r.grossLaborHours, r.lunchHours, r.laborHours, r.finalEff.toFixed(2), ...HOURS.map(h => r.hours[h] ? r.hours[h].eff.toFixed(2) : ''), ...HOURS.map(h => r.hours[h] ? Math.round(r.hours[h].units) : ''), ...HOURS.map(h => r.hours[h] ? r.hours[h].minutes.toFixed(4) : '')]);
+    filename = `eficiencia_${selectedStage || 'etapa'}_${selectedDate || 'dia'}.csv`.replace(/[^a-z0-9_\-.]+/gi, '_');
+  } else {
+    const errs = getCurrentErrors();
+    headers = ['Fila','QR','Etapa','Estilo','ID Operacion','Operacion','Operativo','Fecha Escaneo','Motivo'];
+    rows = errs.map(e => [e.fila, e.qr, e.etapa, e.estilo, e.idOperacion, e.operacion, e.operativo, e.fechaRaw, e.motivo]);
+    filename = 'registros_errores.csv';
+  }
+  const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function showMsg(type, text) {
+  const el = document.getElementById('msgBox');
+  el.className = `message ${type} show`;
+  el.textContent = text;
+  if (type === 'success' || type === 'info') setTimeout(() => el.classList.remove('show'), 7000);
+}
+function showLoading(show, text = 'Procesando...', pct = 0) {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('loadingOverlay').classList.toggle('show', show);
+}
+</script>
+</body>
+</html>
