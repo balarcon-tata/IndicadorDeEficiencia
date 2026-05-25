@@ -1,0 +1,2222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indicador de Eficiencia por Etapa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #161921;
+    --surface2: #1e2230;
+    --surface3: #243044;
+    --border: #2a2f3d;
+    --accent: #00e5ff;
+    --accent2: #2563eb;
+    --blue-dark: #0b3557;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    font-size: 14px;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #0d0f14 0%, #162033 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    color: #001018;
+  }
+  .header h1 {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .header p { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  .container { max-width: 1800px; margin: 0 auto; padding: 24px 32px; }
+
+  .upload-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 16px;
+    margin-bottom: 18px;
+    align-items: end;
+  }
+  .upload-card {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    transition: border-color 0.2s, background 0.2s;
+    cursor: pointer;
+  }
+  .upload-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .upload-card.loaded { border-color: var(--green); border-style: solid; }
+  .upload-card label {
+    font-size: 11px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .upload-card .file-name {
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .upload-card.loaded .file-name { color: var(--green); }
+  .upload-card input[type="file"] { display: none; }
+  .upload-btn-label { display: flex; align-items: center; gap: 10px; }
+  .upload-icon { font-size: 24px; }
+
+  .btn {
+    background: linear-gradient(135deg, var(--accent), #00b4cc);
+    color: #001018;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    padding: 8px 14px;
+  }
+
+  .message {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: none;
+  }
+  .message.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+  .message.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+  .message.info { background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2); color: var(--accent); }
+  .message.show { display: block; }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin: 18px 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .selector-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .selector-title {
+    font-family: var(--mono);
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .stage-buttons, .day-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stage-btn {
+    border: 1px solid #1d4ed8;
+    background: linear-gradient(180deg, #1e5d92, #16456d);
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 14px;
+    min-width: 115px;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.25);
+    text-align: center;
+  }
+  .stage-btn .count { display: block; font-family: var(--mono); font-size: 10px; opacity: .82; margin-top: 2px; }
+  .stage-btn.active { outline: 2px solid var(--accent); background: linear-gradient(180deg, #16a34a, #0f766e); }
+
+  .day-btn {
+    background: #f8fafc;
+    color: #111827;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 8px 14px;
+    min-width: 112px;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: 0 2px 0 rgba(0,0,0,.18);
+  }
+  .day-btn .date { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; }
+  .day-btn.active { background: #2876b7; color: #fff; border-color: #2876b7; }
+  .hint { color: var(--text-muted); font-size: 13px; padding: 10px 0; }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 1400px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 800px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .upload-section { grid-template-columns: 1fr; } }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .kpi-label { font-size: 10px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 8px; }
+  .kpi-value { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+  .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .chart-card h3 { font-size: 12px; font-family: var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+  .chart-wrap { position: relative; height: 260px; }
+
+  .ranking-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .ranking-grid { grid-template-columns: 1fr; } }
+  .ranking-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .ranking-card.worst { border-color: rgba(239,68,68,0.35); }
+  .ranking-card.best { border-color: rgba(16,185,129,0.35); }
+  .ranking-title { padding: 14px 16px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .ranking-card.worst .ranking-title { color: #fca5a5; }
+  .ranking-card.best .ranking-title { color: #86efac; }
+  .ranking-list { padding: 10px 12px; display: grid; gap: 8px; }
+  .rank-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; background: rgba(255,255,255,0.025); border: 1px solid rgba(42,47,61,.55); border-radius: 10px; padding: 10px; }
+  .rank-pos { font-family: var(--mono); font-weight: 700; color: var(--text-muted); text-align: center; }
+  .rank-name { font-weight: 700; color: var(--text); line-height: 1.2; }
+  .rank-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+  .rank-eff { font-family: var(--mono); font-weight: 700; font-size: 13px; padding: 4px 8px; border-radius: 999px; }
+  .rank-empty { padding: 22px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+  .control-card { background: var(--surface); border: 1px solid rgba(0,229,255,0.25); border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+  .control-card .table-header { border-bottom: 1px solid rgba(0,229,255,0.18); }
+  .control-card .table-header h3 { color: var(--accent); }
+  .control-note { color: var(--text-muted); font-size: 12px; padding: 0 18px 14px; }
+  .history-detail { font-size: 11px; color: var(--text-muted); line-height: 1.55; max-width: 720px; white-space: normal; }
+  .history-count { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+  .worst-control-scroll { overflow: auto; max-height: 560px; }
+  #worstControlTable { min-width: 980px; }
+  #worstControlTable th.day-col, #worstControlTable td.day-cell { min-width: 118px; text-align: center; }
+  #worstControlTable th.base-col { min-width: 120px; }
+  .day-eff-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .day-empty { color: #7890ab; font-family: var(--mono); }
+  .hidden { display: none !important; }
+  .repeat-control-card { border-color: rgba(245,158,11,0.32); }
+  .repeat-control-card .table-header { border-bottom-color: rgba(245,158,11,0.20); }
+  .repeat-control-card .table-header h3 { color: #fde68a; }
+  #repeatWorstTable { min-width: 1500px; }
+  #repeatWorstTable th.day-col, #repeatWorstTable td.day-cell { min-width: 112px; text-align: center; }
+  .sum-eff { font-family: var(--mono); font-weight: 700; color: #fca5a5; }
+
+  .table-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 22px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }
+  .table-header h3 { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+  .table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .table-scroll { overflow: auto; max-height: 560px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { position: sticky; top: 0; z-index: 10; }
+  thead th { background: #0d304e; color: #f8fafc; padding: 8px 10px; text-align: center; font-family: var(--mono); font-size: 10px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.08); }
+  tbody tr { border-bottom: 1px solid rgba(42,47,61,0.6); }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody td { padding: 8px 10px; color: var(--text); border-right: 1px solid rgba(42,47,61,.55); }
+  td.mono { font-family: var(--mono); font-size: 11px; }
+  .left { text-align: left; }
+  .center { text-align: center; }
+  .sticky-col { position: sticky; left: 0; background: var(--surface); z-index: 2; }
+  .sticky-col-2 { position: sticky; left: 110px; background: var(--surface); z-index: 2; }
+  .sticky-col-3 { position: sticky; left: 220px; background: var(--surface); z-index: 2; }
+  thead .sticky-col, thead .sticky-col-2, thead .sticky-col-3 { background: #0d304e; z-index: 12; }
+
+  .hour-cell { min-width: 92px; text-align: center; line-height: 1.25; border-radius: 6px; padding: 6px; }
+  .hour-empty { color: #7890ab; }
+  .eff-main { font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .eff-sub { font-size: 10px; color: rgba(226,232,240,.85); }
+  .eff-green { background: rgba(16,185,129,0.22); color: #86efac; }
+  .eff-yellow { background: rgba(245,158,11,0.22); color: #fde68a; }
+  .eff-red { background: rgba(239,68,68,0.22); color: #fca5a5; }
+  .badge-eff { display: inline-block; padding: 3px 8px; border-radius: 20px; font-family: var(--mono); font-size: 11px; font-weight: 700; }
+  .badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+  .badge-yellow { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+  .error-card { background: var(--surface); border: 1px solid rgba(239,68,68,0.25); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+  .error-card .table-header { border-color: rgba(239,68,68,0.2); }
+  .error-card .table-header h3 { color: #fca5a5; }
+
+  .empty-state { text-align: center; padding: 52px 20px; color: var(--text-muted); }
+  .empty-state .empty-icon { font-size: 42px; margin-bottom: 14px; opacity: 0.45; }
+  .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(13,15,20,0.86); z-index: 999; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .progress-bar-wrap { background: var(--border); border-radius: 4px; height: 4px; margin-top: 8px; overflow: hidden; width: 240px; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; transition: width 0.3s; }
+
+
+  /* Pantalla completa para la matriz principal */
+  .table-card.main-matrix-card.fullscreen-view {
+    position: fixed;
+    inset: 10px;
+    z-index: 2000;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.82), 0 0 28px rgba(0,229,255,0.22);
+  }
+  .table-card.main-matrix-card.fullscreen-view .table-header {
+    flex-shrink: 0;
+  }
+  .table-card.main-matrix-card.fullscreen-view .table-scroll {
+    max-height: none;
+    height: calc(100vh - 88px);
+    flex: 1;
+  }
+  body.matrix-fullscreen-active {
+    overflow: hidden;
+  }
+  .btn-fullscreen-active {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+  }
+
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Ajuste de matriz: evita que columnas fijas tapen Total Und. y mantiene scroll horizontal */
+  #mainTable { min-width: 1900px; table-layout: auto; }
+  #mainTable th, #mainTable td { vertical-align: middle; }
+  .sticky-col { left: 0; min-width: 130px; width: 130px; }
+  .sticky-col-2 { left: 130px; min-width: 160px; width: 160px; }
+  .sticky-col-3 { left: 290px; min-width: 190px; width: 190px; }
+  .col-units { min-width: 110px; width: 110px; }
+  .col-minutes { min-width: 125px; width: 125px; }
+  .col-labor { min-width: 110px; width: 110px; }
+  .col-eff-final { min-width: 135px; width: 135px; }
+
+
+  /* ===== Tema corporativo TATA Accesorios Globales ===== */
+  :root {
+    --bg: #f4f4f6;
+    --surface: #ffffff;
+    --surface2: #f8f8fa;
+    --surface3: #eef0f3;
+    --border: #d7dbe0;
+    --accent: #a12631;
+    --accent2: #7f1d26;
+    --blue-dark: #8d2330;
+    --green: #2f8f63;
+    --yellow: #c69214;
+    --red: #b02a37;
+    --text: #2f3540;
+    --text-muted: #6f7782;
+  }
+
+  body {
+    background: linear-gradient(180deg, #fafafb 0%, #f0f2f5 100%);
+    color: var(--text);
+  }
+  .header {
+    background: rgba(255,255,255,0.96);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #e4e7eb;
+    box-shadow: 0 8px 24px rgba(63, 70, 82, 0.08);
+    padding: 18px 32px;
+  }
+  .header-icon { display: none; }
+  .header-brand {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+  }
+  .brand-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .header-copy {
+    min-width: 0;
+  }
+  .header h1 {
+    color: var(--accent);
+    font-size: 19px;
+    letter-spacing: .06em;
+    margin-bottom: 2px;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .container {
+    max-width: 1880px;
+    padding-top: 28px;
+  }
+  .upload-card,
+  .selector-panel,
+  .kpi-card,
+  .chart-card,
+  .ranking-card,
+  .control-card,
+  .table-card,
+  .error-card {
+    background: var(--surface);
+    border-color: var(--border) !important;
+    box-shadow: 0 10px 24px rgba(79, 86, 98, 0.06);
+  }
+  .upload-card:hover {
+    border-color: rgba(161, 38, 49, 0.45);
+    background: #fcf9fa;
+  }
+  .upload-card.loaded {
+    border-color: rgba(47, 143, 99, 0.55) !important;
+    background: #fbfefd;
+  }
+  .upload-card label,
+  .selector-title,
+  .section-label,
+  .kpi-label,
+  .chart-card h3,
+  .ranking-title,
+  .table-header h3,
+  .filter-group label {
+    color: var(--text-muted) !important;
+  }
+  .section-label::after {
+    background: linear-gradient(90deg, rgba(161,38,49,.18), rgba(111,119,130,.18));
+  }
+  .btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(161, 38, 49, 0.18);
+  }
+  .btn-secondary {
+    background: #ffffff;
+    color: var(--accent);
+    border: 1px solid rgba(161, 38, 49, 0.28);
+    box-shadow: none;
+  }
+  .btn-secondary:hover {
+    background: #fbf5f6;
+    opacity: 1;
+  }
+  .message.error {
+    background: #fff3f4;
+    border-color: rgba(176,42,55,.22);
+    color: #8f202c;
+  }
+  .message.success {
+    background: #f3fbf7;
+    border-color: rgba(47,143,99,.22);
+    color: #236d4b;
+  }
+  .message.info {
+    background: #faf7f7;
+    border-color: rgba(161,38,49,.16);
+    color: var(--accent);
+  }
+  .stage-btn {
+    border: 1px solid rgba(111,119,130,.28);
+    background: linear-gradient(180deg, #ffffff, #f4f5f7);
+    color: var(--text);
+    box-shadow: 0 2px 0 rgba(0,0,0,.05);
+  }
+  .stage-btn .count { color: var(--text-muted); opacity: 1; }
+  .stage-btn.active {
+    outline: none;
+    border-color: rgba(161,38,49,.6);
+    background: linear-gradient(180deg, #b5323e, #8f202b);
+    color: #ffffff;
+    box-shadow: 0 10px 20px rgba(161,38,49,.18);
+  }
+  .stage-btn.active .count { color: rgba(255,255,255,.85); }
+  .day-btn {
+    background: #ffffff;
+    color: var(--text);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 0 rgba(0,0,0,.05);
+  }
+  .day-btn.active {
+    background: linear-gradient(180deg, #b5323e, #8f202b);
+    color: #fff;
+    border-color: #8f202b;
+  }
+  .kpi-card::before {
+    background: linear-gradient(90deg, var(--accent), #b7bcc4);
+  }
+  .kpi-value,
+  .history-count,
+  .control-card .table-header h3 {
+    color: var(--accent) !important;
+  }
+  .ranking-card.worst { border-color: rgba(176,42,55,0.25) !important; }
+  .ranking-card.best { border-color: rgba(47,143,99,0.25) !important; }
+  .ranking-card.worst .ranking-title { color: #a12631; }
+  .ranking-card.best .ranking-title { color: #2f8f63; }
+  .rank-row {
+    background: #fbfbfc;
+    border-color: #e6e8ec;
+  }
+  .rank-pos {
+    color: #7f1d26 !important;
+    font-size: 20px;
+    font-weight: 700;
+  }
+  .rank-name {
+    color: #243041;
+  }
+  .rank-meta {
+    color: #5f6772;
+  }
+  .rank-eff {
+    min-width: 92px;
+    text-align: center;
+    font-size: 22px;
+    line-height: 1;
+    padding: 10px 14px;
+    font-weight: 700;
+    border: 1px solid rgba(0,0,0,0.03);
+  }
+  .control-card .table-header,
+  .repeat-control-card .table-header,
+  .error-card .table-header {
+    border-bottom-color: var(--border) !important;
+  }
+  .repeat-control-card .table-header h3 { color: #9a6d13 !important; }
+  thead th,
+  thead .sticky-col,
+  thead .sticky-col-2,
+  thead .sticky-col-3 {
+    background: linear-gradient(180deg, #a12631 0%, #861f29 100%) !important;
+    color: #ffffff;
+    border-right-color: rgba(255,255,255,.12);
+  }
+  tbody tr {
+    border-bottom-color: #e8ebef;
+  }
+  tbody tr:hover {
+    background: #faf7f8;
+  }
+  tbody td {
+    color: var(--text);
+    border-right-color: #eceef2;
+  }
+  .sticky-col,
+  .sticky-col-2,
+  .sticky-col-3 {
+    background: #ffffff;
+  }
+  .hour-empty,
+  .day-empty {
+    color: #98a0aa;
+  }
+  .eff-sub {
+    color: rgba(47,53,64,.8);
+  }
+  .eff-green { background: rgba(47,143,99,.14); color: #236d4b; }
+  .eff-yellow { background: rgba(198,146,20,.16); color: #9a6d13; }
+  .eff-red { background: rgba(176,42,55,.14); color: #9b2430; }
+  .badge-green { background: #dff3e8; color: #1d6a48; }
+  .badge-yellow { background: #f8ecd0; color: #8a6510; }
+  .badge-red { background: #f7dfe2; color: #962431; }
+  .day-eff-badge.badge-green { background: rgba(47,143,99,.12); color: #236d4b; }
+  .day-eff-badge.badge-yellow { background: rgba(198,146,20,.14); color: #9a6d13; }
+  .day-eff-badge.badge-red { background: rgba(176,42,55,.12); color: #9b2430; }
+  .ranking-card .rank-eff.badge-green { background: #dcefe5; color: #1d6a48; }
+  .ranking-card .rank-eff.badge-yellow { background: #f6e8c6; color: #8a6510; }
+  .ranking-card .rank-eff.badge-red { background: #f4d7db; color: #962431; }
+  .error-card .table-header h3 { color: #a12631 !important; }
+  .loading-overlay {
+    background: rgba(244,244,246,0.88);
+  }
+  .spinner {
+    border-color: #d9dde3;
+    border-top-color: var(--accent);
+  }
+  .loading-text { color: var(--accent); }
+  .progress-bar-wrap {
+    background: #e0e4e9;
+  }
+  .progress-bar {
+    background: linear-gradient(90deg, var(--accent), #c55a63);
+  }
+  .filter-input, .filter-select {
+    background: #ffffff;
+    color: var(--text);
+    border-color: #d8dce2;
+  }
+  .filter-input::placeholder { color: #9aa1aa; }
+  .filter-input:focus, .filter-select:focus {
+    border-color: rgba(161,38,49,.5);
+    box-shadow: 0 0 0 3px rgba(161,38,49,.1);
+  }
+  .table-card.main-matrix-card.fullscreen-view {
+    border-color: rgba(161,38,49,.32);
+    box-shadow: 0 0 0 9999px rgba(79,86,98,0.40), 0 16px 30px rgba(79,86,98,0.18);
+  }
+  .btn-fullscreen-active {
+    border-color: rgba(161,38,49,.5) !important;
+    color: var(--accent) !important;
+    background: #fff7f8;
+  }
+  ::-webkit-scrollbar-track { background: #eef0f3; }
+  ::-webkit-scrollbar-thumb { background: #c8cdd5; border-radius: 3px; }
+  .operations-col { min-width: 220px; max-width: 320px; white-space: normal; line-height: 1.35; color: #344155; }
+  .empty-state { color: var(--text-muted); }
+  .empty-state .empty-icon { opacity: .32; }
+  @media (max-width: 900px) {
+    .header-brand { align-items: flex-start; flex-direction: column; gap: 10px; }
+    .brand-logo { height: 44px; }
+  }
+
+
+  /* Corrección final: ranking compacto con colores fuertes */
+  .ranking-list { gap: 8px; }
+  .rank-row {
+    grid-template-columns: 34px 1fr auto !important;
+    padding: 10px !important;
+  }
+  .rank-pos {
+    font-size: 12px !important;
+    color: #7f1d26 !important;
+    font-weight: 700 !important;
+  }
+  .rank-eff {
+    font-size: 13px !important;
+    line-height: 1.1 !important;
+    padding: 4px 8px !important;
+    min-width: auto !important;
+    border-radius: 999px !important;
+    color: #ffffff !important;
+    border: none !important;
+  }
+  .ranking-card .rank-eff {
+    color: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+
+  #btnSetupEff:not(.hidden) { display: inline-flex; align-items: center; gap: 6px; }
+
+
+  #dailyWorstTable { min-width: 1250px; }
+  #weeklyWorstTable { min-width: 1550px; }
+  #dailyWorstTable th, #weeklyWorstTable th { white-space: nowrap; }
+  .rank-index-cell { font-family: var(--mono); font-weight:700; color: var(--accent); font-size:14px; }
+  .weekly-day-cell { text-align:center; min-width:112px; }
+
+
+  .ranking-grid-best-only { grid-template-columns: 1fr; }
+  .ranking-grid-best-only .ranking-card { max-width: none; }
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Procesando...</div>
+  <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+</div>
+
+<div class="header">
+  <div class="header-brand">
+    <img class="brand-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAYUAAABLCAYAAACftps4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAHKgSURBVHhe7f13nFxJdt+JfiPuTVNZ3gKFKpiC97aBbjTaoKfRjfY908PhDMeJS0mrlVYrrrS7T9J+xH2zlHZJvV2tKJHSihxKK2o1Q84Mx7f3HmgL2wAKqCoUynuUzUpzb8T7I+Jm3szKKqCnZzRNsn79iUZWZty4ESdOnBNx4sQJobXWLGMZy1jGMpYByOIvlrGMZSxjGX91sawUlrGMZSxjGTksK4VlLGMZy1hGDstKYRnLWMYylpHDslJYxjKWsYxl5LCsFJaxjGUsYxk5iL8MLqla+4AIJdBoQAMq9ymsAYXJVPh38Ek4uRJuDFN67nmt8l/nvs2XnoMAhEajEehQfgeNzDWlxJO/ZJj2KqXQWoNQCA1CS4QOKm1pniOyRmpDfY1ECdBCIfARWiBw0UICAiEWUt2UWwjle0hHGFrdEAEH/OxYWANbao7lRMl6CrHwu2DIlfrtphA0RVheuyGWoJE2fPix6GP7EhYhzMeFtv8TwTjINTA8skrCsIt99ob4eZdXRDZbtO3dmyLOApZZ8MUiCNUv+Jire7hSJYrTgLDjrRT+0ikF4fnMjU/gzcwg9Q06t8RPSjh40qWyoZ5IZWIxuhVBo9NZJodHcLJZnEAxhF6hEQVVMcIkyGdUA9EI1StWoqMxsALjpl7/Xxy23tkM04OD6EzWCn1hGraosAoNFGHUtY44VDQ14UbjKCFvrBQ0pKauMzc+RkQ6yKIxEMpW4puF334sBI8L81EBMh6lqnkF2nFLCt/FBH/xsFss36JYqikLaLhE2cVZw1hQjkW4P5Yo+qZR/BpLm5uRj4tVsRQ+cXnFPxbntXyR++MmUFCnm6kgC+tRoBREoFgxdSjKG/xl+K30+/6SKQUQM7O89J++xeC771PtuKiQgA6jdKMFaSeC17iSh//Gr1Pd1lpqnC+EBjU1w7P/+U+Z+PAMlSik9tHCCA4lDLcIbWqpCaprmR/ISge5op4n/u5/i2xuAuEgF+m0Xz40aI0eG+Unv/evmB8YJIpEWKWwWK1zDAkoJElH0rRnJ3d++Vcpq6uzq4WFyCkFbQTGUPslnv3mHxKdmSOhnGK+t7C01cHnkpk+FoJ2aQG+gJTWVK5ZzWP/6O+jyxJWKRS2vljYa63RWpNMJikrK0MIgZSl270Uwq3xfYVSZsXpOA5CiGBO8bGgtamfUmbMSClNWegF7Sr+8+eBoB2595bu2EVgaglmse77PkIKHGlX3QU5lobJVbqBQRmlqpZj04WyuCQKs5iHfd9HKdOPUpaow2IFW9mSh0ApjdIK15ForQt4sZgvw/jLpRS0RkxN8+3f/md0P/ciDU4kN+soyA8LO11KFJIp1+Hwf/03OfKVL+JUxAvzLAYNwvPpPfEe3/kn/yvR69eJ46GVjxb5JWv4jUarB0oDUo6DblnBf/+v/xXO+rVoKZE3pZF+CdCA0uiBfv7D3/17zHR0EBMOAhGsIRbUXIcHgdZknAjz9fU88T/8JpvvO4qIRhdd2heuFDSZ2Wle/Hf/lve/90Pq0xq3SO8LMMa/cNeLghp8ImgBnpAkfZ+Gndv5jW/+AVRVWlNW0dAsGnxKKZLJJCdPvsuePbtpaKhfkGcpaMs3noLp6Wl6e/sZGRlhPjmPQFNdXUVzczOtLauIl8URi5ggdfA/Ab6vGRoaYmBgiPHxMbyshxtxqamuYe26NTQ21BNxndzqNfc8MD+fprOzi1QqtVCIadP+ltZVNDU2hoRzKIuGrOdx7VoPvb19zM/PE3EjNDc3s2HjBmKxCAjz6mJ5GB5XntKMT1ynt7eX8bEJMtkMQgiqq6pYvaaV5uZmYq5jm1yaDzQCpRTXevsYH5/IfR+PxampraaxoYFYNFKSngaakdFxenquUVlZyYYN63EdtzhTIKpMLQRMz8zQc62H0dFR5ufTaK2Jx+OsWrWK1atbKS9P5MdTjgj5NuTpYCafw6NjdHZ2Mjk5iVKahvpaNm/aREN93U2ZLv9SKoXv//Y/o/+ZF6gPlkhFy93CBluhLSXTStNy26088i9+B7emAr0E4QqgQWgFaY/T/+abvPYn/4la5SN9H1koDnMQ2phmFeALSTLi4jc38d/+wb+G9etASmv3+xRCG6VAbz/f/nv/HckrncSlYf6FLV0I4biMKp99X/4yd/2dv4msTKClU5wthwKlIIzZaqb3Gt/7n3+L9Nl2KhZZU+VZu/Rq8eZh933A8IsQeEIwrxQ1e3bx5T/8faiuKrm/UTz4fN+nq6ubp59+mgMHDnDkyO0fa1avgVTG4+Kldt56+wTT09NkMxmUr3AcB+17JBJlbN26haNH76aysqI0baxAnpqa5r0PPuT8Rx8xOzOD5/u5WWXEjVCRiHPXnXeyf//eXFvCfTwxMcV3vvNdxq5P4DoLV22u63DPPXezf/9+84XNYP4xVH3x5Zc5d/4jZmZmwVdIKYnH4+zZs4cjR24jUV4WfhRCglAJSKfSnD13ng9PnWF8fBytFNmsh5CCSCRCLBZj44b1HLn9ME0N9SWVQlBeOpvluede4tz5c0jHIZvNEo1GiUajrFu7mrvvvJPamhpcJ0/VgM2UVpw5c45nnn+ONa2tfP6JJyiLl5hYWqXgac3ly1c4ceIkIyNDZDLZgpVSNBJj1apVHL79NjasW5NfUQpV0AvK8p1AcPlyB88+/wJzc3Ok02nQmlgsSkNtLV/4lSeor68vMF0W8yclJnQloUsN9pJfLo2f4RGDj/OQBkdDRClcrZAohAglzHdBEvhIFJ4Gt2Ul9/+tv45bkfh47xSgJGhXs/VLn2PlLfuY1QItHLOXYLPpwORunwneIVE4WuHYfQez+XpTXfPLgwi4R4IWKK3RCrQWhum0QigfGUqO8pFKMed71K5fx9GvfgFRUYYfKO+S4qsQWgHSpaKllSOPP45bW4MnNVooFH4uae0jMP39iZPlG5N80zYUSI1wtJ1B37juAJlslqvd3cwm5zlz9jzTM7M3zWpam5n5iRMnefqZZxkbGyMej7Nh40ZuOXQLu3bvpKWlBa1hdHSUTCZdXATYcrSG8YkJnnvxJU6++y5zySQ1dfXs3LWbg4cOsXXrViorK5idnWVoeKi4CLRVtT4aH6NEEuXlNKxooLGpgSabGhrqiZfF0Sg0ykwmFCil8X3Fe++9z2tvvEFyPklLaysHDt3C+k0b8TyP06dPcf78R/ieX/z6nCKdT6V4/c0TvPjSK4yNjVFWVsbmzVu49bZb2bdvL40NDfjZLOfOneNHP/4J13p78JUpwJioTAqg0WQ8j6yvicYT1DU0EY/HSafTnD17jqeeeZZkMokGfA+Un6en1qC0IJvNm7PDCOSfUmZ1dOrUGZ5++hn6+vqIR+KsX9fGgQP7OHDgAGvXriUSidDd3c2TP32Kcx9dIqt8Mr6/6Iq6b2CAV157jcnpKSLxODt272b3/v1UVFYwODTID370Q2aTczfcunC+8Y1vfKP4y8VQsqySXy6Nn+GRGzyU/1Gk0lx87XWmOjuJi2BOEHRHXi0FllItNFkhyCQS3PLFX6H1vnuQ0Qja+XhCWdiynGiUMjfGtQvt+PPzSG26MGwfzXVKsGoR4EuJqqzk4EMPQ00NhGyhnxYELRDYETAzw7mnniUzMUHecmBoLNAIHcywzcxGASkhUQ31HP87/w3Ve3aBI9COY5Vl6QaHvw/kr3AcKqprmRkaZORaD47y7KrMztys6SJ4t9W2N5FsZ4ZTrh7m/1qYlBGCSFMDex57FGKxwszBM8HsWhtvtqHhEd55712mZ+eYSyaprK5kdWtLiScLobTG93xOnz3PW2+/jdaabdu2ce8993Do0EG2bN7Els2b2bZ1K9XVVTiOw+rWVmNCsmXkZ4iC+fl5Xnv9TT66cJHqqioOHjzIvffey+7du9i4YT3bt21j4/r1xOMxqqoqaW1tLRCewafZ2STnzp0jnU5z5MjtHD9+H7t37WL3bpN27txBU1Nj7llp/xVCkEqnee3NN7k+eZ1Nmzbx0IMPsmv3TrZt3YZAUF6eYPPmTVRXVxnhnXu74bCs7/HW2+/yzsmTxKJRduzcyQP338+B/fvYtHEDWzdvYsuWLdTV1TE1NcXo6AgTE9dZ2byCivLywlmyNVH5vs/ljk6GhkfYu3cvjz/2KNu2bqWmppqJiQlGRkaoqKpidcsqdMAuthiNZnhklI7ODmpratm+bRsRd6H5SKO4ePEyr772Gul0ms2bNnPP0bs5fPthtm3bysaNG9m2fRsrV6wklUozOjbG4NAg9fUNNDbW2907USDLlNZcudLBhQsXiURjPPzIIxy+/TY2b9pIdU01XtZj547tNK9sRjrGzGnqvpDzPpbky4u10IAplreLpZJDJo/i7AvetVimXEYrYa2tzpMmKYzbZ+F/yn5vTDfzEZemvTvZdO9RnFgELRfahpdCTpZIB9wIq289yPq7j5CJx9DSCLyC9mBXDcFnREnTw4J23kz6GVBcxOIp+K/oeWF+I1AGWKVRlCcjJXPxKFuPHaP5jjtBuiCN+6/JU1yygRa6KAEI4isa2fLQA8RaVuEJaRSLMIxegtdvAnYpVyoJYdsZtNCaHVnEaB+CBhQCz/fp6u5m/PoEbjSCFoKPLnzE9MxMPmNpEqAUDI2McObMGTKZDNu3b+P+Y59hdWszUdcxClhr4vEYO3fu4PDhw5SXl4Pd2A6bDLTWtLd3cPHCJSorKrnjyO3cduut1FZX4kpwhMAR0NhYz513HGHnjh0FdQmGfk6o2MmXG4kQjRhTS5BisRhSuIjAEYF8H2WzWdLpNFJImhqbqK6uQSuzwX3o0C3cf/8x1qxuRYpCz70AV7t7eP/993EjEfbv28u9R+9iZVM9riOQAqSAqooEe3fv5Pj9x2hoaKC3t4/TZ87ieZ4tJeidhYhEIkQiUFNTzc4d29i4cSNKKfr6+nJ5As/OYLKiMCvmpXB9aoZ33nuX2ZkZtm3ZyvH77mXjxjZi0QhSgCuhLOqyaeM6PnPvUTZsWM/U9DSvv/EmszNzlkWMC3RAF+0r5ufnyWazVCbKWbd2LY4wSnjzpk089NCD7Nm7l1gsllMpi6GEJFqIcAF5AWFTifGjw1yTe9A8YefnC7g//0iIeYvTAuEQFhL5MmXB5G9hxbS1RSop8ISLbGhk+0MPUbm6BSUdW+/C+i0Fbc8bAOC6xOpq2fvwg1S1rSEtNL4sJkYexW2Em+2VEtAsEMY3g3B3LZm09cUPXmGZP/hToHLCKWhtXoBKMo5L47Zt7HzoIdxEhVUIdsYSzOhvEloYWq/av5cd9x1jLhIhKwy7OwhkaMBACQZdLC2G8EJCg9TmHXKR54K8+S9gdn6ei5cu4bguO3fvoqqmmpHRUa50dOKrpduutU9X11WGhodpamriyO23UVGeQGCEn5T5FIk4VFaWE4mYWWrxbHB+PsWpU6fIeFk2btrI5k2biDrStktbs6rhyEjEpaKiouD5Uv0UOFTkSBnm6RAThVdOiUSCmqpq0JqrV69yracbpXykgHg8Rjxu9hJKIZv1OfXhKVKpFK2trezft5fysjhojRQmCTRaG4G/uqWFW/bvJxKJcPlyR8FGssHCNgXQGhzHIRaLFXhnFXaw+VProP0LeSJAR0cng4OD1Dc0cODAPqqrq9BKI0TIf02bkdFYX8/evbuprKxkYGCAi+2X8wXlXqGRjqSyspKyeBlT01Oc+vBDknNJHAGuNL8hpBmyi1cNblb8BMtxU9GbS4VSLhjwBayyCAIhUVyeXQLYlP+ozCZv0A3WZCG1UQ4LSgp9lxGSGSHYcPgwG+88gigrA+u+dfP77+H2SJAC7brUb9vK/kceIlNRRkZKfFH0WA4CkPnVQm4T6Wbfn4dSPlrlD5Z9rHYUd0+JlBP42uwZINQCWRrMn8NQQuALiayrZceDD1C/ZQu4wYG1MG6yrhZKSmRFBQcee4SabZtJOxItQu8vOC9RzFGl0uII/xoM3Nx3N6CxrzU+cPFyO0OjwzQ2NnLwwH5aWlYxm0xx6cplZueCGWBpeJ5PT08Pvu+zefNmaqurQRuFIFB2Zpy3kYc/hyGEYGxsjN6Bfsorylm/fh1lZWU4UuBIkNK4yDqOxMm5hhbTZiF/er7P+YsXee7Fl3nuhZd57sWXef6Fl3n9jbcZGRu3j5lyTHkC13XZv28fiVicwYEBnnrySZ5++hmuXr1GxlMIEZC2+P0wNTXFwOAgjpSsW72a6qpKtNZIWbhXYOgAUjqsXr2a+vp6JicnGRwcKS7SjsSFCt11YXZ2lt7eXoQQNDQ02F8W0mEBSvzc29uLrxSrV6+mob4BEKbeBbnMg64jWLt6NU1NTdZJoSvHbvknNFLAurVraGlZRWp+njdef50f/uBHvP/+KWZm5kxuYWTbjVA8KktDWYHgeZDxIOMvkjzIZE3KZsHzIJM2m0s5FSptWtjRYGmhtHk2m4VMBjIZhOcVJJlLPsL3EL4Hvm/W2bbdwa58IeyyC4mHILG+jdt+5Qmc2hq0MLOlwoFQSmCEvwtYybzLPA/Cddlx/D5aDh9iVkp86ZjzCsWwX0nAFQJ8BV4W/Az46ZtIWZPfyyKFtoIwSEtAY/JoH5T3MVMGdBa0j9AaqTRSm3cqoeyJ5RCVhEMmFqVl3x623nMXoiyCLvRwtKuQUv21NLQEt7WZe3/966TL4qSFQEmFtqeqf15YMAMOPgvyp9hLQFvWn59P8eGHZ5DSZdPGjdRW17B3z14qKyvpHxiiv3/ATr4CX8XC2mezHnNzc8Tjcerr63MeKobZ8vlKcWsYGhgbH0cIQbysjKqqKmvOCfHEx1q1mXxKKa5d6+bkyXc4efId3j35Lu+88y4ffPih8QjKjUmz5RxUe+OG9Tz22GOsWtnM7Mwsp06f5jvf+x4//PFP6BsYxlMK31dou/ILVn/T09P4nke8rIzGxvyeRTGC74WAeDxObW0tWmsmJyeLsy7A2NgYl69c4+233+XHP3mSnp4eamtr2b59e1HOm6UVpNMeMzNzRCJRamvrcCOR4ix5aCPLYrEYDfV1SClIJpOkUpmCeUhAl9qaao7d+xl27dqB6wh6e7p54fln+da3/jOnTp3C97J5hbIIvbjZjWatNCqVZuLyFSY6Opnr62e2r5+5XvNvPvXZ1M9Mfz9zvb1M9vajlCJeVWGmNQHbLlYnDfNDIwydPcfstR7mevqY7e1jtqePuWv5zzM95t/g7yDNXbtG7zvvkR4aIbpAK2pAoITAc11SFeUc+1t/g1WHbzXTgQAFBCtV0VLf5SGwPRWL0Lq6hYvvvk92epaIpmAmraxgMeNR4MajrGptYXZywrSv92ZSP7O9fcz0D+CnM5TVVKOltE0IBkSp+prZ/sS1HkbOfsR8Xx8zPb0FtFyQwu/t62Omo5Orb7+DmpnBlWZGJoRRuGBer4UgJQWsWsU9//XfoGbbFrNnE9j4bL78+vDmkWuXVlSvakFMz3D14kUiyjcb/CEafGLkijH11EKQRRNb0cTuRx9esNEcfAo2pc+c/4gPT5+isb6BWw8dorKykprqanr6+hkdGSMRL2N1awuu6yCECpgoV14qneHMmTNkPY8tW7bQ2FiPQJA/93aT9BOCgeERLl/poKqykm1bt1BZXm5t4sUrq/C/YT4y/aYRzM0nOfvRBdLpDBvWb2Dzxg2sXrWK1atW0bLKnJdYt3o1lRXlueJMt+fLraurZ/369dTV1uFGoySTSQaHhunr76emppr6utr8TNo+Nnl9iouXLqE0bNuyhfq6WlN8iZWNsHse2axH19WrjI2N0drSwob160yBwSBE4Ps+7Vc6GR4ZZXpmhgsXL9DZcYV0Ok1LyyruuOMIa1a34EiBthNA+xY0msGhEa50dFBTU8u2bVuJRNyCXvE8n7NnzzGXTLJx40Zamlea1VmJrssrNEFvXx89Pb2Ul5ezfds2c15CEFJIRrOXJRJs2LiBlStWEIlG8TyP8fFxurq68Dyf1taW3OZ3MZ0C3NQ5BeVpUoNDvPxv/w09739IuTbmmeJlloEpzpcSJRzmlM/ezz/Okd/4GkSjxuhZcgZv4WkuP/McT/3B71OpNBFf25m9Wa2EtXJ45obtV6l80tPTRFJpXDQq1zxrY0SQlS7T0SjbH7if+/7HfwDVleAs9JMP2wbD7QxkGZj9jDCP5+ScVmbV4vlc/LPv8vz//ceUz84R840LrLZKwTwqUEi06xKtrsCPOPjWtLKQvsUwpic/EmHD8WMc/dt/Ex3Lh8lgsc7XCnyPl7757zn17e/TFI2ZU6Cl8oZghIfZy8HLwvVZZDZj3TUDE55ECY0S4EnJdCTC0b/9t9n3pS+iEzG0sXnky8wRsIDKoc+Ls6gWZmUpfY9kVzc//t9/h+sffkjC1zg5E+JSJdwkhOU0G85DCcksmurdO/jKN/9vqKwoMJwJbXhHCZicneW7P/gBfX39bN60idsPHSIaiSCkpP1KF2+99RaN9XU88sD9rFndkt9XC5nX5pLzfOvbf8rg8AgPPfQQ+/bsxBGB8lcF9AuGdLgvc8NcCC5cusL3vv8D6upqeejB47StWYtxtguPpgCmDrrgRKxRHgrByPgE3/7O95iemuL+++7jlr177DjNQ0q58GBbiFaBcPV8xdTsLN3XrvHWyXe4Pj7Bjm1bOX7fZ6isqLBmYkPXvv5B/uy73yOVyfLgA8fZt3un2U+w5qNc2blPMHF9kqeeeY7Ozk6OH7uP2w8ftJkCQSZIZzL85KnnOXv+I1auaiaZnGdmZpI1La0cvfsu1rSuwpEOUhq32nyzBEorPjh9nqeeeYb1bW18/nOPk4jHCjjZ8xV/+p0/5+q1bg4fPsyRw7cSj0Yt/QsR9Fk66/Hs8y9w6vQZ1q5dy6998QtmU9rumRjY8zP2nANAJp1hcGiI9957j8uXL1NWVsajjzzClk0bLWEKTzkHKFGVhRCA8D3865NkB4fJDgySHewnM9RPZrCfzOAAmcHBfBoaIDswQGagn/TAIP7M7A3trhDwpMZPJkkNj+APD+MPDuENDZEdHCI7NEx2aKggeUND+DZ5Q0NkhkdwUmmEsuaqkLTWAjwE8whqNm3kll/7ElSWFwjQIG9I8oPlmyKdBEFWdNEjVllICY7DhvuPsemO28lIx5qowmQ3dgmpNcJLkx4bIztk2u0PDuPdKA0M4Q0PkxocJDs1BYELLHm7avHegvmsAUVmZprM0DD+4DBqaBg1NIg/uHjyBgbNOweGUcMTiEzG7mPYcwrKEEsoYyaY1j7rbjvIzscfhfJ4gattbuM6EGaB40CO2YM9jFzVF0ILhJRmlrR2Lfs/+zg01JGWOdGKCFiraP/jY6Ho4eDjYnMqLfKKr6vrKmOjYziOw+DgIM8//wI//emT/OQnT3L27DmEkIyNj3OlswvP90HYPSbrxqrtIbC62jqUUvT39ZPx/GBcFwju4N98n+frFwiA+vp6YrEYMzOzjIyM4avgHEBovATIderiCPpHCoHjOLg2RRxBxJE5N9RS8H2fTCaDsmbb6qoqdu3ayb59+5COZHRsjLm55ILBV1NTQ0VlJZ7n0T8wQDqTDYZSDkFuXxuX3onJKSYmJohHo6xY0ZjPaGY6+b8t2trauO2221AKrk9OMTs7h8gp4oViI4zSXAGuK6lvqMP3PQYHB0nOz5uxowt5KaeEheD69esMj4ygtTanyyNuzhEgBwHKN6a2YB88GouyevUa7rjjTioqKkmlUgwN2TMnS9T9ppQC1iUsqiGqNTENUQVRrYigiGhNRCub8p9jaCKAk5ulFBdcGlJAVEBMa6JamYR9VyjlfgsntD20ZpZ3aCNsjKVU4rkuVFdz5HOfpWbT+rzrRgEKu1RqjN084yH84p+DzilmA4EWdvZfX8O+zz5K5ZrVpHPe9EYoBkQRKHPoTmiiaGL6JhOKGOCgcMKRD29A64A2DhARvilHKNO/qKWTVsSVobej7eZcbmAFLxZ4SMpaW7jn1/8akbpalJT2lHg+T5DM96ZSUiuzV+T5uVnp0opBg3QRrsu6Ww+x8fbbyUaj+R6xH0r10seDqfdiPV4MDUzPznKp/TKZbBahwctkmZ6eZmZmhumpSWanjW3b83zar1xhLpU2ZYfJBLiuy4aNbcRiUS5evETPtX4jSGwepfKzvmAyYM7GmFrmJwfQUF/L+rY2MpkM7ZevcH1qCt+eK8v1STALKqpHGML2S/BzTiBbYZbfki+Nq1e7efbZ53jhxRfJZDLmtcJsdre0tOBGImQzaXw/cB/No7y8jE0b1uN7Wbq6uuju6UFIs5FqHC3sITFfobQmk81y9uw5JiYmWLlyBU1NTcVF5mGdFVwh2bt7G9u3bWd6epoPPvyQsYkJhA0NslTbihHwrwA2b9xIPB6nt6+Pjs4uc/Ay1H/Y/gJIZzJc7uhgdHSUeMy4GzsCY/UITQKmp2Y4ceIdnvzpUwwPjyAw7Qeoq6sjGo3heZ455Wweyr2rGMXScBHkN54EpUZD+IsgX8CMgRQNmE0uMaLMGYLcsyXNUzcHLcxmY1iaKOGQicVYf+QwLXccRrgOFMUm0SVMUvia+d4+3vrB95mbGEP7vtk7t5UL19FMKAMhZwwqOlLGyh3b2Xb8PtKVCTKOBCTSCkDjjhkUYDfif9aWi9z/clhsNlsItWA2dnMw/SWL+iorBdlEnFsefYzKHTtzLrtmRVW4qRw2u4BCp9N89NrrdJw8icpkzHdLaoUAklhdAzsffozyVa14wQz6ZyTl4tA2PLjtN0u2cBW1Pe3b09vLwMAAMdflgfvu56tf/jJf/NVf5ctf+hJf/OIX+dpXvsqjDz/IyhVNjI9PcOnSZVOqzq90sCaY1tWrWbNmDalMiueff57u3j6yWY+sp/B8jedrfKWYmp6ms7PTzLCDygSFaYVAcPDgLVRWVnDt2jVef+NtpudmUdoIU61BI/EVjI6O09HRFapJaZiVDXhakdUKXyt72nlx+g8M9HPmzBna29vpHejHt6dgMr6iv7+PTCpFeXk50WgUipohhWDfnj00NzczPTXFiRPv0N07gPI1Soe8HAR42QxvvHmC9vZ2Kioq2LVrF7FYrKAuYZhRq1BeFldK7rrjdhob6rl27Rrvv/8ByXTa6L3iB4uxSIaWVc1s2bIF3/d4+8QJLrV34CsPX2kjV4Csp5hPpfnoo4t88MEHeNkMO3duZ21ra3FxCOEwP5/i3LlznD17hq6uLnw/OHuh7en2DPFInNrqxfdeAtzURjNa409N0/3mW0z19BINTqrmRkHQA6E/7Uw5g6Z5zx7W3HYInEjhmqtUnZRm4lI7l998k4Qyni2FGW9GOJA/NyDMZyUEGekSW7ua277+Veq3bkZH3IJjHHnmNe/UCPP+VJrzf/49Xvje92hsaqJp7RqIRKwkoHCTtKBNwR8C6bokamsY7OxkamgIVxlX2sU65mNBSrJSUr9tG213HDab5qFyg6Vo8buE0nSdfIfhD05T6bg3qTxuDC0EcxGH5oO3cPBrXyPe1IiS5vhSaVglqhWO8pnu6uaV//Cf6Dxzli27dhKtrkIL47a3EML8FzgxaKisrkHNzXHt4iUcz2w6g53AFnfRzwgtBRkN8RVN7H7sEYhFbV2CFwiS8/O8/8Ep+vt6Wbd2Lfcfu5fqqkpqqquoqa6ktqaK6qpKqqurmJ6eoa+/j+R8kq1b8xuUYf6MxWJUVFRwfeI6YxPjdF/tJpXOonxFJpNhenqant4+Trx9gt6eHtra1pFI5H39czygFVWVFbiRGEPDQ/T39zM4OIzS4Hs+8/PzjE9cp+PKFV597VW0hg0bNoRYSuTGyFxynvMfXSCVTlNZVU0q7TEyMs7oyDjDo+OMT0wgkCQSiSJziyAajdLVdZWpuVmS8/PEyspIpbN0Xb3K22+/jZdOs2XLJjZv3lRwMjgwrSUSZVRVVjE8MsrQ0Aj9fb1kPR/f85hPpZiYnORadw9vvfU258+fJxqNsmf3bvbu2UM8HjMlFY0J3/e5cvkKIyMjrF23hnVr11CeSOBGIgwODDAyMkxFRSWrVq4wFAg9roGBwWE6Ojqoralhx/atRNygH83/hADputTU1jI1PcPw8DBdXV3MJedD/TjD0NAQ7733Ae+/9z7pTJqtW7dy79F7iMUjRvYWjFXj3js9PcPwyCjXr18nFi1Da83IyCjvvvMeQ0ODNNTXc/DgQSorzab/YuPgJpWC+ARKgbxSKBJWJWv181IKuWWGeT4rHdKJBPs/+zhbjn8GUVaGEPnNZW29IkzVrRBBI5Ri5MwZXviDf4scHyc7M0vrtm3E62vNkhzMwA2qWMT4uX+kIF5ZQZnrcun0KWQ6g6MVIudXX4oYNwkpyQpJ/fatH1MpKLpOnmT4wzNUOs7PRSloBF7EheYV3PrVr7Jq7150JLKkXVnYtaFUCj2f4tKTz9D+3IskBwapiEZYtW8PWgZmN0utXHl5sZmjYyRCXdMKui9fZrJ/gJiURgF/AioXP7uYUgjyKqHp6+vjvfffQ/uKO+84QvOKpoAVcuUJMJE0haanp4fx8VFqa2tobl5pf8+/VQioqqykrr6Oubkk42MT9PT0crWri46OTi5evET7lSuMjozS2NjAlk2bjPAT9uGgfsLsw9TV1RIvK2N2do6hoSGudl2lq6uLSxfbuXDhIlc6OpifT7Fu3TrWrl1bJNQBNHPJJOfOn2duPsX4+DhXu67S2dlFV1cXnZ1dXL3aRXV1tWmPKGgNZYkE0nEYGBxkdHSUq93dtF+5Qnt7O5lMhvXr2rj11kPU1lTn2xBodoyJq7aujrqaWlKpFGOjY1zrucbVrqu0t1+m/eIlLrdfZnxsjLraOvbt3cuB/fuprDTeVsXjAasU2tsvMzI8zJrWVtauWYMUDjXVVSSTSQYGBxkcHGRFYyP19WbWHcAohSGuXL5CbU0127dtI2oPEJo6B+MQEuUJ6urr8bIeExMTDPT30919jSuXr3DpUjvt7Zfp7e0jFouzY9sO7rzjdmpqqnO8UwijFBKJhJkwjI7R3d3N1a6rXLp4ifGxMcoTCQ4fPszGjevtxMA+ubCwm1UKfAKloGnes5c1tx1cIKxKtO7nphSsncLwjpDMC0nToYPc9dd/nUhDvfU2MqERguJzbwnapRWMjvL8H/0RE2fPUa1gbmKSSKKM5p07kRHXznDz1A34NfdHEWlqVq4gnZyl8/x54sKsRHJDpYCeHwMfRymEyPdJlILGVDPcVABPOkxHXHY88jC7Hn8UWVFuNueKaJOje1hA+prUR5d46Zv/AT08Stz36em9xoqNbdSuWW03qc2mcr51JZSCELiVVTQ1NnDh3XdQySSRhV3xsVD83FJKAUvzkdERMuk069vWsXf3Hjv7N0LBZLJ1EhCNRtDKJxaLUlYWp7XVhHcg1MJgRVRdVU1rSwtNDU1mJmrzua5LbX0dW7duZe/uXeY8Qy6aZ2HrBRBxXRobGljZ3ExVZRUR17XsoSlLlLGyuZm9e/awecsWEomykgLE8xWzc3NUV9VQX1dHbXU1tTU11NZUU1NTTV1tLevWrKaurjYvzwEwB8saGxtoaGjM7es5UlJXa9w5b7vtVlY0NpRcIRq6CYSQVFVX07JqFfX1daYN1kkhFovS2NjAjh3bue22W9m4cQPl5fkVy8JSTb/Nzs4Ri8VYu2Y1K1asQAqIRaNUVlWilSYaieBIyarmZmQouq9GkJpP4XkerS0trFnTau+3yJcfKEYhBBUV5axa1czKlSuIxaLmsKDtx5qaKjZu3MihQ7ewc+cOe54kcBwp3vg3L0iUl7NyZTOu5QmtFYlEgra2Nm6//Xa2bNmI6xZ6WZbq05tySdU+pHt6eeV3/znX3nybct/awQO/5oJdMSOMNQIlXWa0Yt/Xv86R3/w7xpc7fIq1uEJaoz2fKz/8MT/9nd+lIevjesVRAYsJsgiEiW6kBKQ0sGIlX/7d36Fy725j+pEO2E3o3COBLhCm0SKT4dKPn+Tpf/l7VM3N42YyKCdKZuUKvvZPv0H5wVvAMUIqCHQRDNCSdlRrMvKGhvjeP/onjHxwmhokjrL7KEIZopR8eHFox2VOOmz+/Gf5zD/8BxCL2zMhBkoZM1VOKWhTW+F5vPB7v8eZb/4JqyJRVM4L5cYI9l4Cl08B+EKQdF0iWzfxtd/+bSIb16OlY4VbIG4Kb3PEMCHC9yGV5o3/7f/HmSefpkprtNJMCk3N4f185X/5LZxVrSClcWm1G3MhlZrXqdYuKzIZPvzmH/Pa//Mfqc5kiCpzdegNGb4EQtyNBnxHMKs0Nbt28tVv/juorChgaG2Dq3m+jxQmhDMh/iiuhEaT9TwTQkEYwRC4FoZVYBjKhohOpbJks1kcxyFaFiUipfUCkqHxEh6jeWjAVxpfmbrOz2fMuaJ4FNdxiLpOTvAVymZDCaUhlc0u4Flp2AwhwZEOjnX5zu+UGA1h9jA0mWyGVCqN53nEY3Fi8SiOY338S+wn5caqbZPWhh5KeaRSGTzPQ0pJLBYlEnFx7N5hgYDOfyxAJuvh+z4R18G1ZiutTVs920daQzQaxZF53kaYcw6e5yNt2O4c32hMbcOTtYD+WuNls2SzHl4mC5iyo1E3J+DzD+kSMtDundl9Hd/3yGQ80ukMrusQjQY0yJezWNu5+Y3mv6gQ+NIhlUhw2+c/R+W+3eBGjGDB+tqHkN8gNrPWZE8/Z599nrK5FFGlTKAwNJmhIV79z39qXW2DV+VdQIUIwn+Z/2QQDkxKhHSINK3g/q98Bbe+nqwwdxYrq2A1JiyEEhK1IAzEzx8lxtuSMPUrlGnCbjdnhSRVFuPo179CdEMbQhQqBJPZKr1QEkqDpxh6/W1OPf8iCd+cRZdoElozcfo8Z597yZyU16BVPsYOwZmJXH8GK1gFEZftjz1M84G9zEuBygnZpQfFx0YwurHtszzgui7xWIxoNJpXygGCStgkhCAacYnHIsSjMVxpbt4LwsiVSoHQq64up6GhhtraSsrjMaLRiFUI2CG+uOOCAFwpiLouiViM+ppKGuuqqUyUURaL5ma6CyfrApBIIYlHo5TFClM8FqUsHiUeNcpF2jLyYyRoh8aRgrJYjNrqKhrr66isSBB1XRvQjRwdwik3zgKLkgDHkUQiUSorK6itraG6uop4PG6Ui80T1HxBc0Iw/RDNKQQw9XakIBaNUBaPkSiL4Tq2HUGbANdxrCIqPKkc5CuGsJEMotEoFeUJamurqa2tpry8zCiVomfMu5yilKeFiX3lUl4ep66uiqqqcuLxCI5TyEdL4RcvdX5pECjhkJYOrfv3s/XRR8y0xfq0l4YZ3cKelbjw6muMX7pMucaEn9BmalPpuLSfPMnFnzwJ8yl0aIYdXngt7AA7T5KSmltvYd+Dx0nHYnjWp14jCjyPFqvlzwWBICvymvk4CHsc+UKQjEY48NCDbDh6V95wHlIIpRZAAmMyTA0M8Mb3v080lcLVyqxalEdUacpTGc6/8AIj58+bUCtaI4sUZlB28K8ZTJrYipXc+tnPEmteScZx8G68MP4lowSRPiZ+lhKWemap32Ah/xTnX3S45frpF4ewMvg049NUxb/ESkGScSTxVau45XOPE21qMiYjUTTNLYIw6y+mOjrpfOV1xMysibekAQRSgaMUsUyakz/6IRMXLqCznnEKthyoKRS6ubLBBKUSEreygh0PPcCKHVtIO45ZpVj/HGFP4hYPtl8EAhX0s75La/ARpIWgfutm9n/hCYjGTXtsiKvcrL4I5r0KUikuv/wqw+fPUwZo388pYSkUUaWY6uzmwrPPkZ6YQGqjhAMFLIpolXuXlIhIhFUHbmH9kSOkYzF8x+4jLcUEvzSITywePsnTwduL040QzJJvNv/PG+a9wR6iSX8RlEG4er8s2pXCX16loDVeLMbme+5m1YEDEImgg1AWS8kDpfCS81x88WXG2i8TMyd67NWYlvl9n3IhSfX1cuqpJ/GvTyJU4c7HUqNESImSDtUbN7Dt4QcQdTV4OAjM5rfABv9asqK/HAgKhbAvNCkJsrGeA59/nLJ1a2+wGrPQhtZ4PuMdHZx/+WUiyRRCKUMFbSNc2gN2sVSKrtfeYPiDD8Dz8t5Ei5Aop4gcSayunp0PPEhV2zpzeFEW3oj3c8MidflFIcxii7DaXxkYxZQ31xbT5ePS6JOsYD7Ou4rrdqN0IxTn/zjPBvhLqRSU9Taq27CB7cePE6mtRdtd96XGrdBGmWQutnPuhZeJpNI42oSHxtoxCZjP84mnU3S8/Rbd779nIrqGzClLvQdrDxZlMbbefSdthw6RdiNINwZahk4636iUXw6C2ikB2pFkyqKsP3KIdYdvQ8Zi4BSe/ygFIcyKQE9Pc+WVl7neeZWYb+IxEbK/C0zk2JjWZEeGefdHPyIzNmry3YQpSAFEHRp37mT3Aw+RjETxl7gPehl/cfFxhd8ySuMvn1LQkrTWpKqq2PPYo9Ru3Yx2HTvTX4jcjFIDWuFPT/Hqf/423vAIMWG+A+OCqISVZlaoS0/hj45x+amnmOvuNoLKIsycOpTyECBc3PoGbnnscZzmFuaU9T4KUOym8ymAtspACY2SikzUpWzdGrY8+hCxpka8sENaSZgVldAaqTVDly7R/upryLkZ8LO5+PdamAt7pAYhNQKfqFYMnjpN549/AtmsCdcdcs8Lr2DCJisNiHiMPQ88QMuttzKtFEqYuxeCXlkWKMtYhsHPQeoUD6fw30vM5H6mERguL3hPPmkpyUpBKhJhxwP3sfX++4y30SIKgUBYB7IhleHCk8/ScfI9KjRI38RQCma9AmwoAIXUiohwKMv49H5whovPP48/Nwe+H2paaXWQgxTguDQc2M/Rr32VTCJOWhrvo08Lwi3QGCKYFRNkEGTKE9z6+KO07t6FlhLHcRdRCGEamH2bzPgEp37yE6Z7e4hp490l7J6MUTzmKd/ctI6jIZZO8+YPfsjEh2cg6y9K2gA62EISQEMt9//N36CibR1z9rpWneOefB//XHCDei1jGZ9WLC4tbwqL7CDmvvt5j4ygvCKFIIwvlpYOcwiadu7g1i99EWqqzR3J1n83V4qtnhEYtgylmLncwfvf/wnxVBrX9y1xTCRPbRyqbTg7E4xKaE1Eg5uc58yLLzFx/iNz0Y82UT5zkT5zqQSEhGiErQ8cY8e9R5mLOHiOEYwl8/8XhA5oFN4sFtJslkvJvBCsu+1Wtt57LzpehhZOKd9Fi5xaMZHXlGbgzbfpPPEOkUwWqczp7gDBRyUwewDKrCxiCjLDY7z8/36LdP9ASTNSeMUQLke7kuodWznyxc+Tqa4wkVRzrBpEbF3GMv5q4xMqhf9SCBRAgEDAWAFtQ5NlNDhNDdz5q1+gvG2dNfXkN52KIayXj6M1TM9w7plnSfX2EA0Ee+hJs/FrU87ebVJUa1K9A5z89ndgahqtfJQ23khGmZjpaslzgsKuGKqr2P/lL1K3bTMpodEhj45PE4S9nDwFVK5ZzZ1f/jXcxiazQS7EDSYCRrEKNJm+Ad7+/g+R16eIaWEOwYUOloXbnaO3NlF3q6RL/4enuPjyy4hUymw6l3it0EHHmaQl4Dis+8xRNh0xocz9EiuTZSzjrzL+giiFUsgrBaUVGaXIRKPsvvdemo7cbgTxTWwoCgDPp/fcOS68/jrRdAZ7vfXCfItAak1F1qPz7ROcf/Y5RMYzqwuFvYXMblAvZhayiqFq/ToOPfowurKCNNpcJ6qNm+qnBb7v4wOZRBl3/eqvUL1ju/XqugmPIzAn4TNZ3nnypwxeuEAF4NqQB0s9LRFmRaDNhTrRZJKzL7zI6JUOsHdSY1c2S0JIog317H/kEapXr8FzXdSiq5tlLOOvHv4CK4VgKmg8TLLRCLWbN7DtkQdwayoh6uRNHkXIzUa1if+THR6h89nnyI6MEgUclp7xFs7grWlIaRJZnzf/7LvMXWpHKBBC4mujtMzR+PzlJ1r7aO3nQjBrqRBlMVrvuJ21tx8kVRYlKzHi8FO04awRpIWk7fbbWPPgcbNnowsVXmm6S3MGxMty/expTj/9LHHfxwnCaGuJLmJHbWfv5pCcMHm0BhRlWjPd2c3lZ15ATUwCCkVwE17+5aGFAmh7EtqNsmLXLrZ+5l4yZeX49oa0hXVexjL+YiMscwp/WFzEfXqkzU1h4ag1g9lF1tSw58Hj1G5Yh3YclN1ELEbwXaBOdCZD74cfcPWdd4lmMpjwIGYvIMgVHCM3gi+cyP3rCIihyfQP8O6TT5GduI7wlXE9lTJ30Xpxyq13hEBLQWJFI7sefojEmlbSjjSbzp8Ce7d5uyDrulS0tXHw8c8Rra0Hbc5dLA3bSqXITkzw/k+fQg0MUuG4Zn9BA4h8uHPM32iBNBsZ5qIje/OE1hoHcFPzXHj1Na598CFkszc815HbqREgKirZfPw4TTu3k3JdlFUgn04sMYJ/QSglSFR+Oyg3QnKwq7hlLI2Aruom0qICvQg5GWK7IJwK8oXLK5XB4kaj+VOGQDTZT9p46qRclzUHDrDu6F2IioTd7FwoRAtFjhFSmZERzj//HNmJMVylTMiKwBRhxZQSAl8IPOGQFQ6eMHcomzUCdiNbI5WiUms63nqb3vfehUzGrBhyfbB4J2swexDRCKv27GX7PUdJxyL4uXARvzwEs2ylHbyKSjbd9xnqd+8ykWaX8OwyCCikIJuh94MP6T75DpVK49i9m4DSZoVhwpN40qSsdFAYegc2f2UDCCaEIDs8yrknnyY7OIzwzd7C0uTSxqTnONS0rWPfIw/h1VThOQJlr2yliHuWLm8R2IeKezoYwOlMlsmpaQaGhuju6aXzajdXr/XSNzDI+OQk86m0vV88nPJmzTAvaa3xPI9sNpv7N5PJ4Ps3H+AwjKDOGvB8n9m5JCNj4/QNDNHR3cuVq7109/YzODzK1PQM2WzW8HdROYtBa03Wy9rkmYuCQiljU9bz8VXhVOHjQmtzK53n+blyg2Surixcwd8Ivu/n6hmm+WLPhstWGjJZn6xnguaVSlnPJ+spsr4iq5Rp/2L7kTmu0CRTKYbHxunpG6DrWi9d13rpGxxifHKa+YxnryRd1N2lAJ8wSqpedM2thUZJyYymdJTUEo9prRGe4vIPf7RElFTju661RjuSaUcg167hiX/4/6Hp8EF0xEUhQOU3KIsh0Ca8QibLxW99mxf+8JtUzCWJqKL7gKVLSil8R6KiUZTr4guB8H2cTJao5xHR2t6JYMNTS8mUI1l95xHu+c3fpGJtGzjSHjkIF26jfJqNB/uLNCejfY9kdzc/+t//Odff+ZAqFcxyF+51wM8YJVWbKKkv/8vf4/Qf/wnNkSi+DR+RKxcjpAG0kCRlhJWHb+HY//CbVK5fj444BSuYYrOREdDanCVQPnM9vbz+L3+fa2+8SSLjI3PNMQNTuhHmPYUXieJFXGQsilIKN+NBxsREclFIbSKPIiQeDrOJBEf/+m+w8+tfhrKYNRMtjL2E/VMHzgda4U1c5+U/+APO/+D71CJwlEDaW6uCJwu5z6SCKKl/9O+gykZJDXiuxKa11jCbnGdgYIC+vn4mJiaYmp4ik83aS+AlkahLLBqjoaGellWrWN3SQm1tVa6MIAx5eNjOzs5y+UoHyWTS8JQyM83y8gR7du/CDQVnWzAiQo3UOl/vrOczNjbG4OAg/QODTFyfJJ31SGVMlNCIayKoVldV0LyiidUtLaxYscKE2C56RRhKa4aGh+no6LSvXnyvzXEcKioqqK2tY0VDPdGobcdNzpM0hvXa7aU5SJGLPIul5ZaN62lsbCh4rhS01ubioY5Oslnr8SbMOKqtrWHr1i35AHqBudM8iLItnZqe4dxHFxYV8GB40/Cnmd1UVVSwYf16qirMxTimVfnWp7IZrl3rofPqNUZHx0gmU/g20q7jCBKJBA119bS2rKJ55UrqqqtNcLzAeaMEIf8CKgUDIQRpKZgsi3D/3/9NdjzxOYhHUQGTLVIvTKMRfpbZs+f41j/8n2FwmDJt9gUE5kS0EpK0EKiKctbs2sGWffuob20lkkgwPXGdvkvtdJ8+zXBHB1HlEcNcEiO1wnNckhUJbvv619nzta/jJOJoR4ZGYAAjYvJVNXmkUuB5TH94hm/9o3+COzpBzJa9sIxfpFIwwlUjSCHwmhr5wm/9I5ruPGxOiEu3QImGlYJZXViloHzU/DwX//wHvPGH/57Y7CyO79uw20bdZYVgHqhoWcOmgwdYvX0rlQ11uMJhamCQ9tMf0nHmDN7YBAmtEMpHaoXGIeNGSdXX8sXf+ac0Hjpo7saW5hBcmF5BXbX1CpPanpcYHOTP/qd/wOSFdiq0Q8Q3rsfBk2FOss1aPHR2CaUQPNPe3snJd99leHSEdNqsBILhJ4VjF6gax3FQ2iceNZFD9+zZxe7duyiLRXOnZsLDdnBokCeffJrh0fG8SVIrGupq+Wtf/xqJRCKXd8GoCGgStAuYmLjOh6dOc+nKZaanp3PnRIQTMeGptUYKgVZ+LjJnebyM5pUr2b9vLxvXt+E4EqeEWdFXilOnT/PsCy+htcbXCydvAmlECyClIJEoY3XLKj5z72eoq65E23YsaEsRlIap6Vn+9DvfYWJiomBlL9FIKTl860HuvvMOGwJ7cSiludLRydPPPsdcMmlcpB2J8j3a1rfxxGcfIxaLmXFWrBQs43V0XuXHTz5FKpXOXdeLzjtYhPkFDCs1r2jkweP3s2rlCpvP/ioEk9MzvPb6m1y8dIlU1gNkbsVmJpzmKmQpJPGIS3mijN07dnDroYP25rnSSmFhr33qoQCFLyHpCLYcvp2djz0MsYjVsCYKWymmCb4TWqMmp3n1O98j2ddPhQw2IIwyUMIhFY1Rs3sHj/7j/5GHfud/ZeNvfJXaB49RcfcdrPrsoxz6h3+fJ373n3Lrr38FVjSSciTCMbM4V/s4c3O8+6MfM3vhI3uPQn4Q5yFyG8kmYbyWhAQ3StW+fdz95S+SjEXxQi6qInSP9S8SWhjTmYdgPhJh/+OP0HToADqIaWzzFCuDQtu8WbUle3t5/+ln0LOziOBGcft8xpGkK8vZ9vgj/Mo//21u/8f/gNVf/Dw19x6l4p47aPm1z/OZ3/rHPPH//SesvuMI8/EyfCeKlK4Ju4xGj0/w4n/6Ft7oOGDurcjdXB56l6mnEQ8a46IabV7JA7/+G8j6BszRQ1Gw6R0IzI9LcW25NZ31eP3Nk/zgJ09yrbefVNpDIREygnSiIKJo4aCFg0KSVRqEw1wqTf/wGM+99Covv/I6M3PzeVt+yJtNY+5G9pSyZgLwNWghzarZong8hCHsLP5aTz8/efoZTn7wPmMT1/G0tmNC5NysheMY06Hj2pPhLjOpDBc7O/jpM89y4r33yGSyZsZaRDgNeMqEjvGEwNcCT4GvzWdfC3wl8OznrK+ZmpnjwqV2nnzyKcavT9kyl+6NgPZd3de4PjmF52uyPmSVLVdLMp6iq7uH61NTS87eseX5SpHN+uY+bKXIej7pwMQlTBhxAeZeFJu0MIynteEprcHTGk8Jk0zUeJO0Sb5NngJf5YNshi/XmZ2d4823TnD6zFlSGR+Nk6MjNpy2lC5CuGilSaVSTIyPm3sigtvgFsFfGKVgeMsMZF9CEk3Fujbu/trXIJ6w5oJCtg93s5UFJnZ/Jsu1t96m+8RJatwI2rqQIkALh2QkQsuhg9z/3/93tN53D6KuGh110REXHXEgIsF1cNvWcOBrX+Gu/+prxFpWkXFcc4BLaWIasgODvPft76AmJ23Uz1CFloTA14AUbHzgOBuP3EbWdVEiMNcEV1OGsfCbTwZLayFISkHr3t0c/sLnoCwOjrsE65iegkDSAPNpzv3op1zv6CKKceEF8AWkHQdVV8uhX/tV7v57f5fy3TtQiTJ8CZ4U+NLY/6mppuH2wxz/+3+PjfcfYy4SIyPNTWFC+VQIweCp05x/9jn0XDKveBYjS9gFVghqbz3I9nvuJhONmFDmS0nQj4HkfIo33n6Hk+++T9ZX9jCl8bQyl9sEpioz8IUwkXyNLd0cyPSU5v1Tp3jz7RPMJecXNMksIKWZLkhh7+MQeCpvulgKweyy82ovz7/4Ij29fSglENI1ykvY9Ym2mZWPUr7hECGNIrIriZn5FG++fZI3T5y0qyGrxmyfC0A6LloLlDb11FIaDzCM8Mx5kQkzQTLKTXLtWi/t7ZdzK9+loIF0JkP3tWuk0xm0dKwCM4pXYcqdmJyir38Afwk6BRytMCYdIR20cNHSNfWzfedrc7FXaAQUQEqBp5Rpt01am3KVNaFqu/egtTG7mhNY1kRt26yUpqPrKhcuXgThGCVi9x4EmBWCPVwr7aoOoKGxkV27duCUtFrksdjI/lQg1xkCY44SCi00GQG6uop9jz9KYssWex6hcIUQbnLAPkKbexFm+no5/eyzRKamkL6fyyCkJC2gbO1abv9rX6N2106Ix9FC4jsC37pIKilQjoRIBKeuhk0PPsCuhx9kPhqzwdaEEVQaOk6c5PLzL0E6s8hqoRTM3oQWgkhTI3seeZiy1lWkhVEW+eEVfuJmy75J2B3bDBBbtYI7vvZrsLIJ7br23aUGZdBjoaR8hk6f5oNnXyCR8ewtcwa+kGQTZWw6di87nvgcsqkebb21RHBRkRBGkEoH7bpE16/hzr/1N2i77TaS0rgdI3xc7VGZTvPRcy8w3n7FKGGMMApWLwtWMTnBIohU1bDnwYep27yJlOtgFt43xmJ5NJDNely42G5nc0ZABu7JKLMWiUciNNbXsaZlFc0rGilPxMBXSGFuPDPWZYGP4NxHF7lw8RLZrGcHvxFAwt40o2UgVIPVQinDawkIGBoe45VXX2NweNQILCP97HkbbcKZK3P5kYNx5cb30UrlBbyWIFxSGcU7753i3fc+MLfJoY3bteV/HXiRYQS/sjPo8kQ5zc3NNDU2EY1EbX7Dayaf4FpPH/OpdHELChD0yejoKAMDA0ap5ASwMQ8bYe4wl5znWk8v6VRm0b7Mw46yQGHZvgmoHP4c5A+joHw7voK5rDRzQKQQ9nIhgSPM9MGx2U0ZgrnkPJ2dV0kmU7ZMQyMBxGIRWletYsumDWxoW0tdbRVSmFXzvj17qK+rz79+EXn06VMKwYTEyh0lADTauvFoNGnXZe3Bg2y66y5EJIqWZpa01AAwRNUwP8fVt95i+KMLRD1jLAjuMdBakBKCg48+RP3unebaTmzZIdufKdBuZjoubnUNux56mPodO5nzlbkNCXC1Qs6neOsHP2Ki/YrZ/M71w1K1tb9Ks0RfuW8vm48dJVuZQDlWEIZYzJS0dHlLISwocyYWbWdv8Rh77ruXxgN7TT9gTluXhu00jBJHa7yRYV7/7vfIjk8QQ+IEgllItONQ0dLK9vvuJ75yBdpxzN6LNVSbm+rMxUhaSvOb6xJvWcWtv/oruHX1eHbVJLVP1Msy3dnFpWdfIHt9Aq2yKG2UfqmZf342amarNVs3s/n4vajqCnTE3LsQtCjfsiKU+sH+PTE5xbmPPmJmdsbOAI1Gt4YE1rW2cOzoUR556DgPHT/GIw8c54Fj97JrxzaijsBBIYWNCQXMzM5y9tx5pqamCl4XHtpamFl7gOKqlUIqneX1N95mYGjYBI4U5r5uAaCNIqirrWHrpo0c2LeXWw8eZN/Onaxa0UTUkQitzNkea7pCOGR8n3c/PEVXdw9aWwUTUsLaCjijfIzyb2tbx/333csjDz3A0bvupKqy0l4RqwGB0prp6Rnm51OFDSgB3/fp7x9kdnYGKaUJOxOmlWFyfKXoHxhkZmamsIAiBHs5kA+ZE6wQwpMLAyMzwsxR8O4czMqgpqqKu++8g6N3BOlOjt5xhKN33MHBvXuorCgvmPTNzs0xMjqaG4dCGIpGoxH27tnNIw/dxwPH7+X4/cd48Pj97Nu1i7a1q9m5fVtBKJnF8KlTCobI5nPegpb3JkoJQXxVM1sffpDEqlWIG9jH8jAuqJN9fVx66SWYnMQJTAxWEaW8DDWtq9h27G6Im7j7CInAwdFOwU1jWBusmblLYs2r2H7nHWSEALu3YMIyaGavdnPm6WdgZhqU2fkwjHWDISvMqWy3uoYdxx+gYetmkk4QrdVmyWfOP/czIFQk2q7O0o5k1c4dbHv4QZzKhBHaRc+FYfjNLPmDe5cvvv4mfR+cokI4BTMTLQQZBKu2badx02a0jFiTjq1JSGCbP82wMiYLqNm6iba9u8iijbnF95DKIzKX5MorrzJ69hxSmYNvxrUzj8LVgomAq4XASSTYfvRumndsJwl2snFzyCkdy0tZ36fjaheDQ8OGJtos/423tGLLpg189rGHuWX/Lta0NLOysZ6W5iZ2bN3MI8fv5eCBvbjSrLQymRQCQcuqZrZs3kQ8FiuygRuaGTF+83XG9vWVjqtc6eoEBH6w+hAC7SuE0mzfsplHH36Ixx59kGOfuYt77j7Cgw8c4/Of+yx33n6YykQZKB9HmL05304c5jMeH549y9x8csGUzQhUY3rBvq88kWBlYx3NKxvZu2cbmza05YRh0F4hNL7KRyNeDDOzc1y71mO8paw5CgIzlkbjo5RCCsnk5BS9/YNmBbcYCqovF6Vz3hsv/ID9bGWFzrlxm7ZUVFRw660HOXzbLdx+2wFuv20/R269hdtvO8TuXTsoT5RZipm9xEw6zezcbI6mhjaaysoKtm7dTENTg/Xaqmb9ujUcO/YZHn7oIaqqKnI1Wmocl27ZpwiCID6RwBeSVCzOlrvvZv0t+yHimFNjSyGQAArU3BzdL73K2MUrxFROzxtrodDoSIQV69twmpvQjrk5zEonW5T1LLAHqYIIqlo64Eq2HtiDm4jjeX6OEVylqPR92l9/nc533zP3DPt2+SZs+UUouDtaCnAFlRvXsuuxB0lWl5GS4CtzGnrp7r155Gth7Je+FIj6arY9fJyqdWvRjrXfY2hQClpYk4bWCE8z03GVC8++QHxmjtwV5toKe+mQltC6cxu6qtKYjazSFaFuyz2USyaHU1VG8+YNEImiNAghkVoQ0xp/dJxTP3qS9Nh1hDAiAEKNtMpHhA4RBr+XtbRw+POfQ9dUkdHKmPEWWWaXQpA3ncnS1XmVVDZjFJt0zOa3VqxasZK7j95BTXUljpQ4aByhcSW4jiAeL+PAvj2sXt1KeVmczRs38MjDD/DFX/0Vbj98G+UV1tMpBLOiXshLN8J8KsPFS5fMWYOADNZ0JxHcsncfDx4/Ttva1VSUxYlHIsRc15i96mq44/bDPPzg/dRUlqO8rJkM2Amdp3wGh4cZHBw2vWcVTt6MVEjXoB8cB1zXuKOasalsiYZBwncnl0LW85manmZodCQ3ITD9rKmrrSIei6C1QkiNjyKVSdPV3U1mkTMHwZ8iN2nJo9RYCPh4KeRGrp0sgCAScYyrr+MQiTjmnm4hzew+tMmcp2W+bQhBKp1memYOL+uFVjMQiUapb6hHKZ2/QmCR1TOfVqUQCF6wfKCNOSGFpH77VvY++gi6ohJtr1Ys0S8Gwi7XtVklXL90mQ+ee57IfBrXhqEII+v7NDSvIGcagqDrFkcgwSTEaquJxmJBVwEgtSLq+/gjo1z86VPM9feDrxAyPzhKIawYtBBox2Hr3Xew/dg9zDkSIlEITvwuXszHgrAMod0IqViEzXfewYY7j0A8YhjRmgDyZoDSkFrizSa58OIrjLW3kxDGXdcGg8rbYB2Hqto6a58NIRiE4e8CUmNWDjLiUNlQixuLWvOf2euQWhNRPlff+4CuJ5+BrGc2to1do6jEPIRVVDgOzbcc5MBjj5GMRknrnPZeEsU5ZmaTjI6P29hXBq7j4DoOmzdvpLa2xn4blG9LsDbmiqpK7jhymMcee4TPf/az7N29k+qKcmNZy5VoaPlJun9sfIyx8fGCPhAAvmZj2zo+c/QOKsvjubmXlT/mswYpNFs2b+Tuu+8gHo+GxouZTc/NJOnvH8DLFs7ug2FjOQGtFZlshmQ6QzKZYmhohO6e7tzLNKBRNDY2UlEe+OwvBs2VzqtMz8xaF3gjyuPxGLt2bKO1uQlJ1lBPmEb19fUxNnEdZ0mFU9zLBkE7ii0JxQiP9yCfdByUUqTT88zOJZlJmjQ7N8fc/CxZL5tnCgtHSiKua9ZZQiClScn5JK+/8Tpvn3yfnoF+Jq5fJ53Ngg0/nz+jsVQtP6VKwQjyvGVOCUgJAXW1HP1rX6dywwbT2VIY4WkPj4UR/C0wCoHZGd7/7neZ6+kzs1al86oyEEJCoDy1kGhWQJfSrCL3LsMRuWUqRhlJrRHKoyybpe/9D2l/9XX8bNps0tll32LIXQIjhPFKqa7hzq9+haYtW0hCzovik3ZjECEUW5s5z6OsbT37n3gCt6HeLncDm3AJIoQglEZ4PtcvtHP5xZeRyVkEHmgjFIo34pQ9GyICMgd9Efwbyp2D9bRQvkIpbetmL4S2ithJzvPqn3+fkbNnzaaoVvkpXxHyKwXrDlxezi1f+AKt+/cyJ41C/jjQ1td/amomP5atR0lZIs6a1hZiuQNlhnt8ra1rosbTGiEdWlevoa2tjXhZDKU0vvWyVbYZ5oTqzw6tYXJympnZWYQUdr8I0D6xWIRDBw9SUV6W75fQxrVRDtrMebVi29bNrG9bG54Dg7Xtj42PM59KFXZmaFWIta339vXy5lsneOnVN3jm+Zfo7R8wfaI1WimqKivZsX07kUhkgUkwjNm5ea5e7TbnK4IJnlZUV5SzaUMbbetW250oM9Y1gqnpGS5ebEdrnXMECCNX9RIMmePf4h9KwhAzl1/D9evXefGll3np5dd48aVXef7lV3j+5Vd48eWXuXS5PZwbDZQl4tTW1hqvIq3sZr9ZSYyOjXPi5El+9OOf8tRzz/PGWyfo6LpKOpMxfRuIvsJKFeCTSZP/AtBA1hHMxKMcePRhWm89BHZDUmM3gIPWFsCaOZSCrEfHK69y6Y23qNDGc0KHlk8Cq+2VZnxoCJRAKDO7CPKVUgg5aCOoZoZGyKTncwLKmJc0Qikivo8zM8uHP32S5OV2UH7BkjAMq+fyqyXsKJQOFa1ruOerX0XV1ZF2XHzp2PhIobwfE1qYhagSgiwOmXiMO770RWq2brX3GdvYTQsWzwshhCA7m+Tss88xde0aMeVb99CcZDHWZK2Q2SxTI8PgeR+v/lqjfcXE6CiZ1PyCibzQmjiazOAQb/znP4WxCZvHCr0S7BKYk5AS5UgizSs58qUv4axoImNNXiWRb1bBV1NTUzmFhX2d8n2qKiuprKzM5besw+DQKG++dYJXX3+TV159nZeL0iuvvc7Lr73OK6++ziuvvMaVji6w3f5xSBeG7yvmkkk85ReIcuUrGuvraV7ZYBZ3wYa7pUGOhELjCIEU5oRza2sLsugQmEIzl0zaUBgLlZgZo0YpjI6OcubsWc6cO8fA0JA9mSsASUVFBUfvOcrqNa2GrlbJFq+2lYb+gUFGRkaNg0LwHgErVzTRUFvDmpYWKioSuQuxtHUBv9LVxcyc2f8oNm0tBstWOXbKjdtFOkZgXEVNMl5GyWSS8x9d5Oy5jzhz/iPOnr/AmfMXOfPRJfoHR4xSsK6vCKisqqKtbV3u8JxWnvEQs6aorOczOTlFd3cP777/Ps88/wIvvPwKA0MjximvaGpWjE+nUgjV2Jcwi2bF7p3s/NIXIJEwniihQbpAgAZQRtCrvgHe+s73iafSSC9rpkjFJgsgIqCno4Ns74BRNCGZvbRiMKdNrnx4Cm8+nZtRBxtKAo0UENWKZPdV3vjWt2B+3gZ7u1nYUODSYcXtt7Pj3mPMSIe0NAeLFhVaJVBKhyqh8YRgWsC+++9n/X335byvwsJgKQRKeOr997n42uvEPM/cVaF1aAZp/1aaONB7/gLMzJYMV14aZnbnJVP0dXQapV8gGIzSiShFlXC49vZ7XHzlNcikgRv4t2sr+IQDUtJ48CB77r+fVDSCcQJdiEAo5JnJGIwy6YytV57YWkMiXkYsFl1Q2uj4GO+8+y5vv32Ct0+e5ERxOnGSEydO8PbJE7x18iTXrvUswY83B18rUul0roramkC00pQnyom5bknBZmB/EOZ2QkdKqquqiUajxRnJep4R8AXIr+6FEEjHjBXP9+x+mfHrD2jnKZ+e3l6zIUyhki4wywhov3SZdNYzI8/+5roRWltbKCuL09KykuYVTSa/Ld+NRBkcHKGvb8AezCzo1JIIr2YXlUE3QL7ugZuuOUBrzrEAwkHZARuYu6MRl927drJp40azN6I1jgTHhvEQwri0K0yMqcmpKU6dPcuPfvxTevv77eqroBoF+FQqBS0wUU4FeFISa2rkyBOfJdHYmHNXDPwWFu0Iq711Ost7zzzHVEeXuU3NmueEvWAngADiboTpoVE+fOFl9HzGCBFbn0ArhJdyuRcpjXetlwsvv0GZBqGVKVsI08HSHEgSKBJelsuvvUbnS69C1kOo4KDOjRSPrUM0gltdyY5HHqJuy2bSoUXCYqQoQInyg9DUWelQt20LB3/t15CJhBGOBa6ES0ADWuFfn+TVb/8panSMCAqpjJA0pkCVVw5aE0EwcPESQxcvQRBPJofwO81ngX2PUsyeOc/VD88SlXYaG8obeIBEtKIik+X9nzzJ9Y5OY+kIZyU09kPdKqQ5tOckytj2yEPUbttKUloRJoxSQjtLdlbEdReYOIQwAlDb5bsgWBKaUBEaeybHhhEvmQwz4rpujn8Xr0UJBO3F1EU4Rh0H5kPQSKFNaPeF1FoAEQqbbv4pavOStdNI7Gl/awKRUmO9kC0Mz2QyGU6dOsUPf/hDTpx8h/n51IL5rgYmJ2e53HHF0Fnl3x+Px2lra0MIgStdNm/abDasLfsEwvnsufP4vjIq68bNL4Hih0IED3+bG+uiYOKF1ggb+TG3YhH5VVGwsqqpquT4/ce4/fBtVFSUG5dbZVcNNlyNmXtJPF8jpcvYxASvvvYG1ycnIW9tXYBPoVLQxsaNREmXVCzK5qN3sPKW/RCJGAFrUejimPtovwCyitFzl7j06hvEMmncQCGEBlL+MY32s1RJhw9+/CQj774H6TSobO5kYeEgMZtjQvlkJ6/z3o9/ymR7BwmZd73UgbcFwYsUEa2Izad448++Q7KzE5SfO+G7kHUMcrwDYOnSsGkj+x9+AFlfS1baCJ/oJUREaebE1jMjHbzqKvY//jixDRvM0jsgVimEvtfaaqZ0lovPPkf/mbNUOw7SHiAL7oMI6C6sgnSVYn5oiEvPPEeqv99eremZ050F2j5YXQCeYrZ3gOf/47eQ0zO4pgKh9uXbKZQmrjSTnV1ceOFlslPT6LCtuDQ5AHOQUbkutWvXsOfhB3AbG8gKjLDIdUgp4phC42Xxwg1hgXGWyGbIZsJhvk19hdY4jrlsyFzlan7PTxbyxjshRC52zScZwFJK4vG4EeY6sIFohJRMz0yT8TzzghydCukLmImPMvG1rk9MkM1krL0+b86IRiI4BfsyxbMfowhqa6pZ07qa1pZm6mprKCuLFZijhHRIJud599136eruLnAh1VbTnj53llQ6nXdDtXsS69ato7qqCqU0SmnWt22gPFFu9w7MnoWUkr7+foZGRgMNtySCJuhQP4W+ydNpiaICSkajUeLRKPFYlHgsYv+N4QhhDq8JE8vL/CtAa6oqy7n3M0f54hc+zx23H2ZD2zpqa6uJRFx76tscbJSuY9znfc3g8BBd3dfw/cWZ/5Pw1C8AeUL6QpByHKo2tLHtwfuINdabmWswMEKMmtuQDRehFNnJKS6/9CpzPb1Egysbi5Z5hSsNTcT3EIODvPkn/4nBk++gZ+fAz5oNVKUQygPloT0P6fukhoY5+4MfcuHZZ6nIppGeZzS8lZNam4PqChtFFUGZcJhp7+DsT5/Cn5w0+wtFCDpfGE7IJzCRMsvK2HjPXbQe2MecNAHlljYhhWiE5WK7yeZLh1TEZd1th2i743ZkPGZWZMIq3qIpU0FJwaE+rZhsv8I7P/ghZdks0ron2mgw+X4L/jLEIZbJcvn1N3jvu98j1dsDXhahfDND1HaD2vfMvsR8iusftfPK7/87hs+co0oLpO0Xra1bsU2gTcA2NLH5NJdfeo2hsxfAU0YxqKJ2FZHHDCgJiTLW3XU7Lfv3kHRMCO8gv2l3Ic3Nd1BdXUU8FrMUltb5STA9Nc3sbP6glLEtKxxHUp4oo6aqiqqqCqoqK+zzIfrZ/nVdl+rqalt2Yd8Uo6hZZjM5JLDLE2VEnIg9PW4nFgLGJsbpsiaqIKJAvrR8qeZgmiCdytB99RrKtx5mykegcaSgsqI8H+E0x3XhiMTm87o1azl+7BiPPPggjz3yEMfvO8aGtnW4jjR9pQVSOCSTKS5evETWuo8GaWZujo6ODpDB2CG3AZtIJLjafY3Ozqt0dF5lbGyc6poaW67lFwHzqXmudl/DL9poXgwa0zVB7hz/2RVgIAfyisGMu+ALjaK2tpq77jzCZ+65m3tz6S7uPXoXmzdssDxlaW5XEMHKwnUkq1tXcc+dR3jo+P08cOwYBw/sp6mpwayWtLYUN445mazH4NAwmUx2Ae8G+JQpBSyFzZmE6ajLnocfpGnHduO8nBtE+Q4r1S6hTTiL8QsX6HjrTSKpJJHAE6jUAyFIrYj5GcY/+ohXf/+POP+n38e/1IWcSyKzPiLrmTQ6wcRb7/LWH/whH377e6iRMRx7+jK/PrD11CpYBSMwgqwsneXi62/Qd/o0eJ65Z7i4MsWwGYQws87EiiYOPfYwcmUjKRtq+EYI1QowdM5GIsRaVrHjwQdIrGw2ob4Rhs4iz8D5p/LfCKzH0cwsZ595htmrV4lagSDC7wumUrlRYjb8Xd/DnZ7k/A9/zMv/5+8x8NIriIEhRDqN8LKIbAaRTuH19NL55NO88nu/T/9bb1Pp+8YcWGyqLoLWPnEEyd4Bzv70abzrkwiz2xbkKG5evm12hp5YuYJbHn8U2bKSrHVxDCRa/tFAEBgxXVNTQ1VVJdrGvNLazHRn5+boGxgg4xlXQWHfs2b1ah5+8EEefughPvf44zzy0ENs2rwxZ2sPXgEQj8ZoqK/LfV2ab/K9FPSBsl8H3SCA2qpqKhIJlK+M8hImXEbay3LinZOMT03mJzi5FIh1cwWrQnDm3Ef0DQxYu7dVZUohpaCpsYmyeNmC2uVKswXHo1Hqa2torKtjVdMKtm/ZzMEDB6iuqrbkNW0SQjAyMpJzcw3q1dPXy+jYmC0/H63UdRzOn/+Ip595nmeeeyGXxkbHA5KaZ4TAV4rua9eYtiec8zb/xZGjbwGL2xFg5U2uFNuGMCorK9m7Zzd79+6yaSf79+xi395drF3Tmn+6QHblPwsNrpTU19SwZcMG7jp8G48++ACrmpvNY0F2KfB8n5mZGbLZzCJ882lUCgK0cJh3I7QdOczOBx9ExMrReqHAW1S+a012bpb3n3qKub4+ospGzbxx/xqzhvaIzieZv9LBm3/8J/zZP/ltfvrPfoe3/+iPOfnv/4RX/q/f53vf+G2+941/SvtTz+KOTRgvm4IXhD5rUyfD2GYWFUUz2z/A2WeeJTk8krMV3jSkgIjLioMHOPzE46QjLr5wCt+7GEJ08wVcl5pt9x2j9dBBG20W0xa7TA1mluEUtAUN+D7Xzpzh0huvU66V3TsohcIBIdA42ifuZ0nMztD32lv88J/9Lt/+rd/iuf/jX3Dy3/9H3v7j/4fn//n/wXd+63/hhX/9+4yfOUMiNU9E+6HN6cUYwQxqoXzKfEXnm29x7dnnIZ3NRVDNUauoiNyfQoB0abrlAAef+CxzEYkvyR0cLORBSxChKU/EWdHUiFaeySsEWik8X3HxUjuT102oCm13XCrKy1nd2krbmtW0tqyiqbGe1HwK3yv079dK0VDfQGVl/nRqSVh5ZGqZT76liRF2mvqGOppXrUQGsabsKle6LgNDwzz7/AuMTUxgetW4QJvPAt9YaHn3/VO8/ubbpDJZhDXvOo7ZR6tIVLKquRknOOWfq2C4VvZ7W6/A/CSEoKKinGgk2LzOP52cnyfr+znllvGyXO3uIeN5lqahJ7SJKjo7O8f09EwuZTKZXL5AmCsEI2NjDA6PLMrFxShUmiK3g5bH0vyZ9bIIIXEdkyIy+OyEJgV56mkNqXSG6xNTZtVrJ26mDyESidLSvJKtm7cQcc2h0+K2LKXrPnVKQQApAU5jPQ/89V/Hqa2x8VgWN48sUKC+x9gbb9Dx5pvEfR9XGzWeW9UtQhBhN5+lBlf5RDyP2OwcyfYOOn7yLCf/8D9w4t98k7P/73cYeu0EcmyMuO8h8cxwE4b0QfcFKbiUPqim2dhVxHyPa++8T/+Jd9GptL0voWAyvRDhtkqBiEc59IVfYd2BW5jKpi0/FrNACdhyUlrRtHMntz3+KCJRBsKuEMAogxIkL/hOK7zRUbqeeZb04CDC9xel71KQQAyf+NQ00++dpv3b3+Pk7/8h7/2bP6L9Oz8kefo8salpYtk0Ah+Nj49vT7sufKEOnb1AKyLKo2x2hhPf+S7Z7i7wPWtyMoISSo9dIQRCOohYnFs+/wSt+/cza4d+ThQE1+vlvoNYxGXr1i1UVCTQyscRGk8bD5KhoWFeef11xiYm8XwTnzMoUaHxshnOf3SJnp5ee/gqP0wjkQgbNm4gGo0sSmed4yFNJpslk8mSziWPjL2FzNeaWDTCjq1bKYvG0No38kVbl2pHcvlyBz/84U84c/Y8Y9cnmZtPk0qnmU3O09M7yFPPPMeLL79KMpUGIVGh/RCBWQGtzN0FUJLEBtrscQh7VkQIie/7jIyOMpecy2fTGq3tqWZbmBaC69en6O3tzW3u65zpxOx3GNOYdUW3ZflaIaQ5AxS4QwghmZ2dpbe3l2w2a02+i0MLE10gk82SyRr6pjIeqUyWZDpDKps10VVDHBOGEIJoNIrv+2QyWXuTm/nXfPYLI8Br057BoSH+7M+/z0uvvcnMXMp4bFkHBikFXtZjcmrS3oVhYMK1SyKR6JJWBecb3/jGN4q/XACt8aem6X7zLaZ6eokF9i3B4t1sl94ZDc1797DmtoPgularlXosPzR6r3bT2tbG1qN3mzAWwSZbcQeFOE1gBb7SpAYH+em/+L/I9vVTps1NbQahLsltzNo/87/k7IHCsAkugjIhSGhIAGUa4oBjZ6uBfdTUckHDwHY+tgaBvdMRAj/jMTQ2RtveXcTrasEJlt+LlRSCEGYO4EZoaGhgMpNiw55dJt590Wlt7MwraKltIhc/+ohb7rmL5t17jMuHpXEpZZBDQG80OpOl5803OPXdPyeanMfxzTxtqcdLwRojcBVEtaYMSGgoV1AORJTCyZkOA0VQqGwLYe3Ktq1SG1a6Pj3JnMqybs8eRDyWi+dkyildkmmwBtelqb6OS6dPo+fm8bWmrKmJ3Y89DLGo6Q9j20MjiMWjjI6OMTk1bVuYzzI2Nk7X1U5S6SzzKSNkxyeu09s3yDvvvs/ps+dIZ7L58WLHxupVqzh86KA51WvNezOzc1y6fIW55Lz1Zzft0b5iZmaGru5uOju76OjsorOzi+7uq3R0dtBQX08ikaCyopK5uVn6+8PmHxPCWQgTiK+r6yqdnVfp6uqm/fIVzpy9wKnTZ02YbWE2p3OuDkKgfZ+62lruOXon9XW1OcpqNANDI3R0dlpzVp7fKioqiMXjTE5O09s/wEeX2vngw1PGlGOHajDBWtHUxO5dO4m4EXytuHS5g4vtV8hYzyFh+19KaS78cRzz2f4trRuiDMyBFsIG3hMI1q5upTx0enpsfILLVzrIekFwPTOIlNJMXp/k6tVuOruuGlp1XaXjSgcDA0M0Na0gGo0wPjnFpUvteHbfBStfPN8I8K7OLrq6zJ5HsPcxMjpCbV2tucAHUFqTzmZ479RpOq520d3TQ//AAKmUh+f5JNNpJidnuNh+hdOnz5LJeoYnLN0c6bBp/frcXk2pefZNKQVdpBSiH0MpZDWs3LubNYcPmTj8SyoFw1Bl5RWs27YFN5GwTGMyL3gk+CIQUkpBcp73v/s9Lj3/AtX23mSRy2DrbGdRZkMoqKsdsEGxIhR4TmD2MmwMliAwVU4Z2INqLCFWiiGEPbyCYHJiAkcI1u7fh4iawHBB45Yuz7jNCSEpX9FIZX0d5TU1iDCdw7lNw8xnDK0ramtYv20bTjxuV2JGEoRtqYFCy/0dlKEUmeFh3vj3/4HZ9itEfeNeGGwuh8hXMhXCDuTiPIK8Wc52kAiED4b2pRCUZvKY/kOAcASjw8M0tKyidvMmu6EuAgtwyZrloBWx+lr8uVn62q/gZTwSJZWC4Z1oNEokEqW/r9/E9LftCP6dm5unf2CQKx1dtF++wqX2y1xqv0z/4JC5TyNEd6E1leXlHD54kHVrV+MEdz4sohSw43Z4ZJihoWGGhocZGh5iaHiYkeERRoZH2LRpEzU1NTiOQ0NDA+Pj40xOTSLCq1thaKmUZm5unvHx64yNTzA1M2uupQyt4M1kR6B9j0RZjLvuuIOtmzcaL3LblFJKISD59PQ0HV2dXLh0ictXLtPT20tyft4IeQEgTcRYrdmxbRsb1q/DcSTTc3N8ePoMgyOjaDvbF5jQD1u2bGbXrh20tbXRtm4N69atpW3tOtrWrWN92zpaW1aRnE0yl0yaFZmdTGUzGZpXrqCpsT7XD3mlEFrdCUE2k2F0ZMzS2KThoWEGh4aZnZtl67ZtJBJxJiYCpeCH+tYEuBsZGWZo0PTP4NAwg7acZCrFurZ1VFZUBHvt9Pb38/Y77zCXTCIcxwb0G6Cjq5uOji4uXGrnSkcn6WzGKms7ErSiPGHiaq1obMi55xejeDp5QwgtcjE+gnDSQQplCj5YbWqVyJIQuSVcXXMzZXV1eVudFdrFCdsxZtAr0D7Dp87w4Y+epEYLXGWu7jAhDoov6DZCIFz3gnfl6qXzisAeFBFCmWQJKBe56a0YwaAROaFrTvYmfI9TzzxL91tvg+eba5eWKs802FbeOHWLSIQVa9ciXbMnsBDCuo6GvD6EYNW6NtxEef4ZYYRNuK4LYdepvubSCy9x9dQpXK0QyhxkulmE6b/UU6ZPgg43HZQ/yW6wsKyA56zytqFQIr7GnZrjw6efZeZaL9I3Z0rMCmQRPg3o7DjIsjK23neM2p3bmY1G8GzY9lIQQtK2bh2HbztEPOqacARoe1+BRDhRMr5mLpVmejbJzNx83i6vA08Ts2cTdSMc2L+Xbds24bomfHqOJEUne83X9iSPCKL9miQsv0AwCzL9XVdbzX333sP6NWuMGTNIgaCUEum4uJEIjhtF2gjCYO5cUPYQofY9ysriHL3rTnZs34JjFp8lyQp5URGYuuaS8yRTadJZ3xzaskJaA45jTEpNTU1s2bwZRzooTKiOgcEhY2YJglYKqChPsG/vLm47uJ9bb9nHwQP7ufXAfg7dsi+fDuyjbd0aXOnk6CmQzM3N0Xn1KlkvfGzR8n3AV8JOgIKvkWDCG9pzJfmViuGhYNyGd3rAhOsx4dvDSdmVe/BGpTWel+Xc+Y+YnprKyREhJRkvy+TMDMNjE4xdnyRrw/Vobfkf4+2woa2NNatbEIIit+88bk4p5Eea/af0IDAwi0jzusCnuwQW1Cc/y9LSpMAtcjEYpg8K0qjrk5x+8inEyBiO54H16DG3FpnZTy4hkdokEfrX2FOLT3aYVUWODIFgAqvKgjnpjRGUYWJjakAR15rI3Byv/+mfweBw3jqyKEICwDIUUhqzEaUFeSkBrwGCE9HBbMxmKZU/B23NdN09nPj+jyibz+BiluLBLU8/TwRz+DwK6V38ax5m4Clhzr5oNK6GMq0ZOvsRl557AT0zZyYUYHffQoO1GMJc9FOzfgM7Hn0Er6aGTMSuEBZBLBph377dPPLQg1RXVuBng3MvASwXhS4XwgbPE9pcblNRFueeu+/kjtsOURaPh+pnnjWRNM1zwcFJqxIK8oHl7eBbK3DtL6xsbODB48fYuW2bOVSpFOZ+FhMPyLf3Mwf3uWnr1iqENYNkszQ21PPAfcfYv3cX5WUxWw/D0EKbOslgXNpm5Oc45j8ZSrm6asikUjTU1XLnHUdoXrUCEPjKp69/wAS/05gxLwwdmhrraaitwZXm4hpXClwpiIRSIh5jTUsz0Yhj760wwSqllPT29DI9ZfYzBMZWn7+PwE4QCd4XYh3rnGEmI+Yua4G1hNtM5tqkEB3MsgkIIiFY93trAtNaI6Ugnc6SSiZzJ8RdxzFWXynMCklKq7CN7BRg7zP3aV25kiO3HaKirGzJexVuSimYDRqz6aikGWCmI405JWiTtucLLAughP1bLOBjk0ogUCcEzLJYRkM+hAYtFNr3uPLBh3S9f5pyzInnYBYkEFYBOAuSsMl0gtHyyt6XG3wH5m9f5pMWNi/StlnaGcLSSWDfiTTvtfFgIkozfu4i7/3kaZjPmGtDF0WRHVQYIa6x+io0azS/L0ZDO9uRRnFi5n2Fg3HBsxqhfdT8PG98989JdvdSbmdowVWH5q4oB62XToqPn4rpafpgYVqYR9rZm4lBFJtPceWllxm93GEuw9WGZ4tpm4MwMzohJUQkWw8fYuMtB0gtMusJHBaEBlc4bN26ma/92pfYt2sXiXjcHqQ0ZxQk5t4EoRWuNONKe1nKYxG2btrAF37lCQ7feoBoxA0NJIPg7Q72pq7cbV35sqU9pSwxkyOBwLHROQOBDGbS1FBbx4PHj3H82L00N60g6pqxJBE4QVmYUN+OAOVlzC2DZXFu2bePJz77Wfbu2kE8EgRLL83HwQ1jQZ3N3Uq2nrl2KFwhiMciVFUk2Ld7F48/9jDbtm4k4kq09kmns1y9ehXl+UQch4jjmnJRrF21iury8jwN7L5VWAQJYEVTA/W1VUidxcV4xLlSMDs9TVdXp62xxvfNRNMRGregzIAehcl1zP0ZrvUKMudmrHUhSOH2O2Yi5tgT7o4wMccCegmgsiLBg8ePc/SOIzTWVhtFY8+6CHyE9kH75rPy0SpLPOqya/tWvvj5z7KisS5nul5MLwhdLEFKQOks8739PPs7/ydX3zxBud30C6Ctp0dO2VmBrh2HSeVx+Otf5TN/9+9CLBY+v14SN1GdIhjFNN3Tz5P/6t/S98rbVKXTIDy09O2KwEEumP0bBEsoHbDvwiyhEAB5BAQt8dMNEWx8+8LP2QmVACUdyjZu4oF/8PdpPbgPEV0qjO8nx1L7BsUI8go0ZLN0vf42f/a//S41E9M4mSwqJ0vzanwxpgtQojt+gTA9rAkWgpKUI9n+2Ue557/5W8Qb6sydDkv2qJmdaeUhFPS8d5qnvvt9/vY/+y1IxA0BhLBiQhvrixAY5WsanM569PYNcKWzg8mpGWamp0nPp1Ba40hJNOpSVVVFXU0ta9euYc3aVmLxmOGZwOxZ1Fezs0nar3QYG7M12YZpG3RD+CkpBNu2bqGu1mwCC2GsRblwGwomp6fpvnaNvv4BpianmJmdtW6cmkgkSllZnESinMbGRjZsWM/KlUaJCPsu8z77dm3ooDQMDAzS3dNzUwfEHNfSo66Ohvp6Yq5R7MJu8KZSaU6fPYevfHMe0V5zGo26rF+3lhVNTSG7RaHlIWD/bDZLV9dVhkZHzaw8NDWoq6tl29YtYJ0DrlzpMHdS36juAkBRHi9j+/btlJXFGR0b50rHFbJLnCYO/yKAivJytmzaSGV5wvxuTYVKw8T163R2dTEwNMjU1Cxz80l7lwvEYjEqysupr6tl/bo21q9fR8Rx8h6SlkGKecn8dhNSWKsMqZEx3v+z7zF0oZ24CmYg1iPd2uHtIhwwnjVKwIzvse3YMfY9/jhEoxCOXBjKH0apKhVXPpdHm2ijvafO8tZ3f0T0+gwx5aOlj5IKtMDRDkIb2+cC5NZ9xXOa0F8Feww/DwT1sO+15UslmI/H2HDXnex58D6cyhvFjf/kCEwANwVr5/Zmpnn3hz/l2ol3qFJmw9mX+f43l5EaCBYQNodS3fGLg+nn4ICR0CYqbKauls987Ss0bN18A6UQ4hNt7Oci7XHx9Fk2792FY8NOGBu4MGEWimhr9i2M0cDzfVLpDMlkkkwmg1LKKIVYlERZGfFo3Pj2F1UnMEkECL+jmMzFf4eRK8Ha37Hdm/sc/A6ksx6zs7OkU2mynmfMr1ISjUYpSySIx2w4isBcYZ9bjJKUqlvwRYmHwnkDfgrTJfjdULewbTdE0OgS7S6kqu37mzOuLImbqRbFdCx+KFTfdDrNXHKe+VQK3zdKIRo1YTISiTIibnhEmoICL7NSuCmlgEqjMz6p61P4qYyN1ROIAJ2voMhXPviohCZSWUO8ptaEYS5U1j8zctVWGoRPZnqW1OS0uTxHm82coGEiZEvNKwYrGQhSsZAKq7gS+ESNsNOxACFB5SOQiTIStbXmqtFP9J5fALTGz2aYH78OqTTSznpCpuolBOsvE2a9nOtjS39POiTq6oiUl6PlUjXP8wmYWbWwtnbh2LukBUWiJHhG2E4ObuTL+zppQ9KCskvtywRfLfwlhDBP3QyWLCwPpc3dHwIWCEXTGrNCwo7tpaoRfmWQT4T/CMNmLsgX/gIKl6M/0ywjL7/sX1BQz+KKBf33s2FBDW9UkMjtYlvihkoImYoXFmM3l63ZCQon259cKfjmYIqx8mEKs943pciT6ycr7LQ2lmqjEJYaeDcPbb1otFUA2M1gs37JH8AyMAQIrxR07n/BwaN8/oDMomgZ/vOBoVoxL2uMSQONudxe5Afapw0abaMy2nhSQRtsXYs3CBfDz5+2N0ZAa2OOwfCLzNe4hDy2CPOIjXRqeUwE/RUK3mZ+s2Yj2+c585ONtrv4uxbHoo/kqlZiMhPW2MVYtMAwTPiWfDsWg/l9iS4veDpPzaIvwgit0kvm+7jtXYBC47r5ZAVqDuHybtzGxbCAcgsKWcTQX/BVweyrBAzflcLPVyksYxnLWMYy/krg46jUZSxjGctYxl9yLCuFZSxjGctYRg7LSmEZy1jGMpaRw7JSWMYylrGMZeSwrBSWsYxlLGMZOSwrhWUsYxnLWEYOy0phGctYxjKWkcP/H9dvQV88O9djAAAAAElFTkSuQmCC" alt="TATA Accesorios Globales">
+    <div class="header-copy">
+      <h1>Indicador de Eficiencia por Etapa</h1>
+      <p>Selecciona primero una etapa y luego un día para ver la eficiencia por hora</p>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="upload-section">
+    <div class="upload-card" id="card1" onclick="document.getElementById('file1').click()">
+      <label>Archivo 1 - Detalle de escaneos</label>
+      <div class="upload-btn-label"><div class="upload-icon">📂</div><div class="file-name" id="fname1">Haz clic para seleccionar el archivo Excel</div></div>
+      <input type="file" id="file1" accept=".xlsx,.xls,.csv" onchange="handleFile(1, this)">
+    </div>
+    <div class="upload-card" id="card2" onclick="document.getElementById('file2').click()">
+      <label>Archivo 2 - Rutas activas</label>
+      <div class="upload-btn-label"><div class="upload-icon">📂</div><div class="file-name" id="fname2">Haz clic para seleccionar el archivo Excel</div></div>
+      <input type="file" id="file2" accept=".xlsx,.xls,.csv" onchange="handleFile(2, this)">
+    </div>
+    <button class="btn" id="btnProcess" onclick="processData()" disabled>⚡ Procesar</button>
+  </div>
+
+  <div class="message" id="msgBox"></div>
+
+  <div class="section-label">1. Selecciona etapa</div>
+  <div class="selector-panel">
+    <div class="selector-title">Etapas detectadas en el detalle de escaneos</div>
+    <div class="stage-buttons" id="stageButtons"><div class="hint">Carga y procesa los archivos para desplegar las etapas.</div></div>
+  </div>
+
+  <div class="section-label">2. Selecciona día</div>
+  <div class="selector-panel">
+    <div class="selector-title" id="daySelectorTitle">Días disponibles para la etapa seleccionada</div>
+    <div class="day-buttons" id="dayButtons"><div class="hint">Primero selecciona una etapa.</div></div>
+  </div>
+
+  <div class="kpi-grid" id="kpiSection">
+    <div class="kpi-card"><div class="kpi-label">Etapa</div><div class="kpi-value" style="font-size:15px" id="kpiStage">—</div><div class="kpi-sub">Seleccionada</div></div>
+    <div class="kpi-card"><div class="kpi-label">Día</div><div class="kpi-value" style="font-size:15px" id="kpiDay">—</div><div class="kpi-sub">Seleccionado</div></div>
+    <div class="kpi-card"><div class="kpi-label">Eficiencia</div><div class="kpi-value" id="kpiEff">—</div><div class="kpi-sub">Promedio del día</div></div>
+    <div class="kpi-card"><div class="kpi-label">Unidades</div><div class="kpi-value" id="kpiUnits">—</div><div class="kpi-sub">Total</div></div>
+    <div class="kpi-card"><div class="kpi-label">Min. Ganados</div><div class="kpi-value" id="kpiMinutes">—</div><div class="kpi-sub">Total</div></div>
+    <div class="kpi-card"><div class="kpi-label">Escaneos</div><div class="kpi-value" id="kpiScans">—</div><div class="kpi-sub">Procesados</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sin SAM</div><div class="kpi-value" style="color:var(--red)" id="kpiNoSam">—</div><div class="kpi-sub">Etapa / día</div></div>
+    <div class="kpi-card"><div class="kpi-label">Top Operario</div><div class="kpi-value" style="font-size:13px;line-height:1.25" id="kpiTop">—</div><div class="kpi-sub" id="kpiTopSub">Mayor eficiencia</div></div>
+  </div>
+
+
+
+  <div class="section-label">Ranking de operarios</div>
+  <div class="ranking-grid ranking-grid-best-only" id="rankingSection">
+    <div class="ranking-card best">
+      <div class="ranking-title"><span>5 mejores eficiencias</span><span>Mayor → menor</span></div>
+      <div class="ranking-list" id="bestRanking"><div class="rank-empty">Selecciona etapa y día para ver el ranking.</div></div>
+    </div>
+  </div>
+
+
+  <div class="section-label">Acumulado semanal</div>
+  <div class="control-card">
+    <div class="table-header">
+      <h3 id="weeklyWorstTitle">Acumulado semanal · 5 peores operarios</h3>
+      <div class="table-actions">
+        <div class="filter-group" style="min-width:230px;">
+          <label for="weeklyWorstStageFilter">Filtrar etapa</label>
+          <select id="weeklyWorstStageFilter" class="filter-select" onchange="onWeeklyWorstFilterChange()">
+            <option value="__ALL__">Todas las etapas</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="control-note">Acumula la semana del día seleccionado. Ordena de menor a mayor promedio de eficiencia; el menor queda como el peor. Puedes filtrar por una etapa específica.</div>
+    <div class="worst-control-scroll">
+      <table id="weeklyWorstTable">
+        <thead id="weeklyWorstThead"><tr><th>#</th><th>Etapa</th><th>Operario</th><th>Cód. Operativo</th><th>Línea(s)</th><th>Operación(es)</th><th>Días</th><th>Promedio eficiencia</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th><th>Viernes</th></tr></thead>
+        <tbody id="weeklyWorstTbody"><tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona un día para ver el acumulado semanal.</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-label">Indicador por hora</div>
+  <div class="table-card main-matrix-card" id="mainMatrixCard">
+    <div class="table-header">
+      <h3 id="mainTitle">Matriz de eficiencia por etapa / día · ordenada peor → mejor</h3>
+      <div class="table-actions">
+        <button class="btn btn-secondary hidden" id="btnSetupEff" onclick="toggleSetupEfficiency()">⚙ Eficiencia con set up</button>
+        <button class="btn btn-secondary" id="btnFullscreenMatrix" onclick="toggleMainTableFullscreen()">⛶ Pantalla completa</button>
+        <button class="btn btn-secondary" onclick="exportCSV('main')">⬇ Exportar vista actual</button>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="mainTable">
+        <thead id="mainThead"></thead>
+        <tbody id="mainTbody"><tr><td><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona una etapa y un día para ver la matriz por hora.</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-label">Registros con problemas</div>
+  <div class="error-card">
+    <div class="table-header">
+      <h3 id="errorTableTitle">⚠ Registros excluidos (0)</h3>
+      <div class="table-actions"><button class="btn btn-secondary" onclick="exportCSV('errors')">⬇ Exportar errores</button></div>
+    </div>
+    <div class="table-scroll">
+      <table id="errorTable">
+        <thead><tr><th>Fila</th><th>QR</th><th>Etapa</th><th>Estilo</th><th>ID Operación</th><th>Operación</th><th>Operativo</th><th>Fecha Escaneo</th><th>Motivo</th></tr></thead>
+        <tbody id="errorTbody"><tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div><p>Sin registros con problemas</p></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let rawEscaneos = [];
+let rawRutas = [];
+let validRecords = [];
+let allStageRecords = []; // registros base para detectar etapas aunque falte SAM
+let errorRows = [];
+let stageList = [];
+let selectedStage = '';
+let selectedDate = '';
+let historySearchTerm = '';
+let historyStageFilter = '';
+let weeklyWorstStageFilter = '__ALL__';
+let showSetupEfficiency = false;
+let matrixRows = [];
+let dominantStageByOpDate = new Map();
+let maxHourByDateCache = new Map();
+let chartHr = null;
+let chartOp = null;
+const HOURS = Array.from({length: 13}, (_, i) => i + 6); // 06h a 18h
+
+// Etapas que no deben aparecer ni contar en el indicador ni en rankings.
+const EXCLUDED_STAGE_TERMS = ['ticket', 'empaque', 'control de trafico', 'trafico', 'camoga', 'esfumado', 'laminado', 'az 46', 'modulo perforado'];
+function isExcludedStage(stage) {
+  const s = norm(stage);
+  return EXCLUDED_STAGE_TERMS.some(term => s.includes(norm(term)));
+}
+
+function handleFile(num, input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fname' + num).textContent = file.name;
+  document.getElementById('card' + num).classList.add('loaded');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary', cellDates: false });
+      if (num === 1) {
+        const sheetName = wb.SheetNames.includes('Export') ? 'Export' : wb.SheetNames[0];
+        rawEscaneos = sheetToObjectsAuto(wb.Sheets[sheetName], ['Fecha Escaneo', 'Etapa', 'Estilo']);
+        showMsg('info', `Archivo de escaneos cargado: ${rawEscaneos.length} registros desde "${sheetName}".`);
+      } else {
+        const sheetName = wb.SheetNames.find(n => normHeader(n).includes('dp070') || normHeader(n).includes('rutas')) || wb.SheetNames[0];
+        rawRutas = sheetToObjectsAuto(wb.Sheets[sheetName], ['Estilo', 'ID Operación', 'SAM']);
+        showMsg('info', `Archivo de rutas cargado: ${rawRutas.length} registros desde "${sheetName}".`);
+      }
+    } catch (err) {
+      showMsg('error', `Error al leer archivo ${num}: ${err.message}`);
+    }
+    document.getElementById('btnProcess').disabled = !(rawEscaneos.length && rawRutas.length);
+  };
+  reader.readAsBinaryString(file);
+}
+
+function sheetToObjectsAuto(sheet, expectedHeaders = []) {
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+  const expected = expectedHeaders.map(h => normHeader(h));
+  let headerIndex = 0;
+  let bestScore = -1;
+
+  rows.slice(0, 15).forEach((row, idx) => {
+    const normalizedRow = row.map(c => normHeader(c));
+    let score = 0;
+    expected.forEach(h => {
+      if (normalizedRow.includes(h)) score += 3;
+      else if (normalizedRow.some(c => c && (c.includes(h) || h.includes(c)))) score += 1;
+    });
+    if (score > bestScore) { bestScore = score; headerIndex = idx; }
+  });
+
+  const headers = (rows[headerIndex] || []).map(h => String(h || '').trim());
+  return rows.slice(headerIndex + 1)
+    .filter(row => row.some(v => v !== '' && v !== null && v !== undefined))
+    .map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { if (h) obj[h] = row[i] ?? ''; });
+      return obj;
+    });
+}
+
+function normHeader(s) {
+  return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+function norm(s) { return normHeader(s); }
+function normalizeId(v) {
+  const s = String(v ?? '').trim();
+  if (!s) return '';
+  const n = Number(s);
+  if (!isNaN(n) && isFinite(n)) return String(Math.trunc(n));
+  return norm(s).replace(/\.0$/, '');
+}
+
+function parseEmpleadoField(v) {
+  // Compatible con el nuevo detalle: "Empleado" viene como "12757 - Nombre Apellido".
+  const raw = String(v ?? '').trim();
+  if (!raw) return { code: '', name: '' };
+  const m = raw.match(/^\s*(\d+)\s*[-–—:]\s*(.+)$/);
+  if (!m) return { code: '', name: raw };
+  let name = m[2].trim();
+
+  // Algunos querys repiten el nombre completo dos veces: "Ana Lopez Ana Lopez".
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length % 2 === 0) {
+    const half = parts.length / 2;
+    const left = parts.slice(0, half).join(' ').toLowerCase();
+    const right = parts.slice(half).join(' ').toLowerCase();
+    if (left === right) name = parts.slice(0, half).join(' ');
+  }
+
+  return { code: m[1], name };
+}
+
+function cleanRepeatedName(name) {
+  let out = String(name || '').trim();
+  const parts = out.split(/\s+/).filter(Boolean);
+  if (parts.length % 2 === 0 && parts.length > 1) {
+    const half = parts.length / 2;
+    const left = parts.slice(0, half).join(' ').toLowerCase();
+    const right = parts.slice(half).join(' ').toLowerCase();
+    if (left === right) out = parts.slice(0, half).join(' ');
+  }
+  return out;
+}
+function splitNamesField(v) {
+  const raw = String(v ?? '').trim();
+  if (!raw) return [];
+  return raw.split(/\s*(?:,|;|\/|\||\+|\s+y\s+)\s*/i).map(cleanRepeatedName).filter(Boolean);
+}
+function splitCodesField(v) {
+  const raw = String(v ?? '').trim();
+  if (!raw) return [];
+  return raw.split(/\s*(?:,|;|\/|\||\+|&|\s+y\s+|\.\s+)\s*/i).map(x => x.trim()).filter(Boolean);
+}
+function explodeOperatorPeople(codField, nameField) {
+  const codes = splitCodesField(codField);
+  const names = splitNamesField(nameField);
+  const count = Math.max(codes.length, names.length, 1);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push({
+      code: codes[i] || (count === 1 ? (codes[0] || '') : ''),
+      name: names[i] || (count === 1 ? (names[0] || '') : '')
+    });
+  }
+  return out.filter(x => x.code || x.name);
+}
+
+function findColumn(cols, exactNames = [], containsNames = []) {
+  const exact = exactNames.map(normHeader);
+  const contains = containsNames.map(normHeader);
+  let col = cols.find(c => exact.includes(normHeader(c)));
+  if (col) return col;
+  col = cols.find(c => contains.some(x => normHeader(c).includes(x)));
+  return col;
+}
+function findSamColumn(cols) {
+  // Evita usar "ID SAM" como SAM.
+  return cols.find(c => normHeader(c) === 'sam') || cols.find(c => ['sam minuto', 'sam minutos'].includes(normHeader(c)));
+}
+function parseNumber(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').replace(',', '.').trim();
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+function parseExcelDate(val) {
+  if (val === '' || val === null || val === undefined) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val === 'number') {
+    // Conversión LOCAL de serial Excel para evitar desfase por zona horaria.
+    // Antes se usaba milisegundos UTC y en Guatemala podía mover la hora 6 horas atrás.
+    const wholeDays = Math.floor(val);
+    const fractionalDay = val - wholeDays;
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(
+      excelEpoch.getFullYear(),
+      excelEpoch.getMonth(),
+      excelEpoch.getDate() + wholeDays,
+      0, 0, 0, 0
+    );
+    const totalSeconds = Math.round(fractionalDay * 86400);
+    date.setSeconds(totalSeconds);
+    return isNaN(date.getTime()) ? null : date;
+  }
+  const s = String(val).trim();
+  if (!s) return null;
+  const direct = new Date(s);
+  if (!isNaN(direct.getTime())) return direct;
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s+(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?)?/);
+  if (m) {
+    const year = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+    return new Date(year, parseInt(m[2], 10) - 1, parseInt(m[1], 10), parseInt(m[4] || 0, 10), parseInt(m[5] || 0, 10), parseInt(m[6] || 0, 10));
+  }
+  return null;
+}
+function formatDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function formatDMY(dateStr) { const [y,m,d] = dateStr.split('-'); return `${d}/${m}/${y}`; }
+function formatDateTime(d) { return `${formatDate(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function dayName(dateStr) {
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const names = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  return names[new Date(y, m - 1, d).getDay()];
+}
+function getScheduledLaborHours(dateStr) {
+  // Jornada ya neta de almuerzo: lunes a jueves = 9 horas, viernes = 8 horas.
+  // Para otros días con datos se usa 9 horas por defecto.
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 5 ? 8 : 9;
+}
+function getStandardEndHour(dateStr) {
+  // Jornada real: lunes a jueves 06:00-16:00, viernes 06:00-15:00.
+  // La hora de almuerzo se descuenta en el cálculo de horas trabajadas.
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 5 ? 15 : 16;
+}
+function getDisplayHoursFor(records, dateStr) {
+  // Mostrar siempre al menos 06h-18h, pero si existen marcajes después, extender las columnas.
+  const maxRecordHour = records.length ? Math.max(...records.map(r => r.hora)) : 18;
+  const maxHour = Math.max(18, getStandardEndHour(dateStr || selectedDate || formatDate(new Date())), maxRecordHour);
+  return Array.from({length: Math.max(0, maxHour - 6 + 1)}, (_, i) => i + 6);
+}
+function getCurrentDisplayHours() {
+  return getDisplayHoursFor(getCurrentRecords(), selectedDate);
+}
+function getLaborHoursWithExtra(maxHour, dateStr) {
+  // Regla corregida:
+  // - 06h = 1 hora trabajada.
+  // - 07h = 2 horas trabajadas.
+  // - 08h = 3 horas trabajadas, y así sucesivamente.
+  // - La hora de almuerzo se descuenta únicamente desde 13h en adelante,
+  //   porque los grupos almuerzan 11-12 y 12-13.
+  // - Dentro de jornada normal se limita a la jornada neta:
+  //   lunes a jueves máximo 9 horas, viernes máximo 8 horas.
+  // - Después del cierre normal, las horas extra se agregan individualmente.
+  const standardEnd = getStandardEndHour(dateStr);
+  const scheduled = getScheduledLaborHours(dateStr);
+  const h = Number.isFinite(Number(maxHour)) ? Number(maxHour) : standardEnd;
+  const regularHour = Math.min(h, standardEnd);
+
+  let worked = Math.max(1, regularHour - 6 + 1);
+  if (regularHour >= 13) worked -= 1;
+  worked = Math.min(worked, scheduled);
+
+  const extra = Math.max(0, h - standardEnd);
+  return Math.max(1, worked + extra);
+}
+
+function getMaxHourForDate(dateStr, fallbackRecords = []) {
+  // Cache para evitar recorrer todos los registros por cada operario.
+  // Esto evita que el navegador se congele con bases grandes.
+  if (maxHourByDateCache.has(dateStr)) return maxHourByDateCache.get(dateStr);
+
+  let maxHour = null;
+  validRecords.forEach(r => {
+    if (!isExcludedStage(r.etapa) && r.fecha === dateStr && Number.isFinite(Number(r.hora))) {
+      const h = Number(r.hora);
+      maxHour = maxHour === null ? h : Math.max(maxHour, h);
+    }
+  });
+
+  if (maxHour === null && fallbackRecords && fallbackRecords.length) {
+    fallbackRecords.forEach(r => {
+      if (Number.isFinite(Number(r.hora))) {
+        const h = Number(r.hora);
+        maxHour = maxHour === null ? h : Math.max(maxHour, h);
+      }
+    });
+  }
+
+  if (maxHour === null) maxHour = getStandardEndHour(dateStr);
+  maxHourByDateCache.set(dateStr, maxHour);
+  return maxHour;
+}
+
+function getSharedLaborHoursForRecords(records, dateStr) {
+  // Avance común por DÍA, no por operario.
+  // Optimizado con cache para que no se congele la página.
+  const standardEnd = getStandardEndHour(dateStr);
+  const maxHourInDay = getMaxHourForDate(dateStr, records);
+  const sharedRegularHour = Math.min(maxHourInDay, standardEnd);
+  return getLaborHoursWithExtra(sharedRegularHour, dateStr);
+}
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function buildSamMap(rutas) {
+  const cols = rutas.length ? Object.keys(rutas[0]) : [];
+  const colEstilo = findColumn(cols, ['Estilo'], ['estilo']);
+  const colEtapa = findColumn(cols, ['Etapa', 'Área', 'Area', 'Proceso', 'Fase'], ['etapa', 'area', 'proceso', 'fase']);
+  const colIdOp = findColumn(cols, ['ID Operación', 'ID Operacion'], ['id operacion', 'id_operacion', 'idoperacion', 'id op']);
+  const colOpNom = findColumn(cols, ['Operación', 'Operacion'], ['operacion', 'operation']);
+  const colSam = findSamColumn(cols);
+
+  if (!colEstilo || !colSam || (!colIdOp && !colOpNom)) {
+    showMsg('error', `No se encontraron columnas necesarias en Rutas. Detectado: Estilo=${colEstilo || 'NO'}, ID Operación=${colIdOp || 'NO'}, Operación=${colOpNom || 'NO'}, SAM=${colSam || 'NO'}.`);
+    return { valid: false };
+  }
+
+  const byStyleIdStage = new Map();
+  const byStyleId = new Map();
+  const byStyleOpStage = new Map();
+  const byStyleOp = new Map();
+
+  rutas.forEach(r => {
+    const estilo = norm(r[colEstilo]);
+    const etapa = norm(r[colEtapa]);
+    const idOp = normalizeId(r[colIdOp]);
+    const opNom = norm(r[colOpNom]);
+    const sam = parseNumber(r[colSam]);
+    if (!estilo || isNaN(sam) || sam <= 0) return;
+    if (idOp && etapa) byStyleIdStage.set(`${estilo}|${idOp}|${etapa}`, sam);
+    if (idOp) byStyleId.set(`${estilo}|${idOp}`, sam);
+    if (opNom && etapa) byStyleOpStage.set(`${estilo}|${opNom}|${etapa}`, sam);
+    if (opNom) byStyleOp.set(`${estilo}|${opNom}`, sam);
+  });
+
+  return { valid: true, byStyleIdStage, byStyleId, byStyleOpStage, byStyleOp };
+}
+
+async function processData() {
+  if (!rawEscaneos.length || !rawRutas.length) {
+    showMsg('error', 'Carga ambos archivos antes de procesar.');
+    return;
+  }
+  showLoading(true, 'Construyendo mapa de SAM...', 10);
+  await sleep(20);
+
+  const samMap = buildSamMap(rawRutas);
+  if (!samMap.valid) { showLoading(false); return; }
+
+  const cols = rawEscaneos.length ? Object.keys(rawEscaneos[0]) : [];
+  const colQR = findColumn(cols, ['QR', 'QR Id', 'QR ID'], ['qr']);
+  const colEstilo = findColumn(cols, ['Estilo'], ['estilo', 'style']);
+  const colEtapa = findColumn(cols, ['Etapa', 'Área', 'Area', 'Proceso', 'Fase'], ['etapa', 'area', 'proceso', 'fase']);
+  const colIdOp = findColumn(cols, ['ID Operación', 'ID Operacion'], ['id operacion', 'id_operacion', 'idoperacion', 'id op']);
+  const colOpNom = findColumn(cols, ['Operación', 'Operacion'], ['operacion', 'operation']);
+  const colFecha = findColumn(cols, ['Fecha Escaneo'], ['fecha escaneo', 'fecha_escaneo', 'fecha', 'date']);
+  const colLinea = findColumn(cols, ['Línea', 'Linea'], ['linea', 'line']);
+  const colCodOp = findColumn(cols, ['Cod Operativo', 'Cód. Operativo', 'Codigo Operativo', 'Código Operativo'], ['cod operativo', 'cod_operativo', 'codoperativo', 'codigo operativo']);
+  const colOperativo = findColumn(cols, ['Operativo', 'Operario', 'Empleado'], ['operativo', 'operator', 'operario', 'empleado', 'employee']);
+  const colCantidad = findColumn(cols, ['Cantidad', 'Escaneado', 'Escaneada', 'Escaneados'], ['cantidad', 'escaneado', 'escaneada', 'escaneados', 'qty', 'quantity', 'units']);
+
+  const missing = [];
+  if (!colFecha) missing.push('Fecha Escaneo');
+  if (!colEtapa) missing.push('Etapa');
+  if (!colEstilo) missing.push('Estilo');
+  if (!colCantidad) missing.push('Cantidad / Escaneado');
+  if (!colOperativo) missing.push('Operativo');
+  if (!colOpNom && !colIdOp) missing.push('Operación / ID Operación');
+  if (missing.length) {
+    showLoading(false);
+    showMsg('error', `Columnas no encontradas en detalle de escaneos: ${missing.join(', ')}.`);
+    return;
+  }
+
+  showLoading(true, 'Procesando escaneos y detectando etapas...', 35);
+  await sleep(20);
+  validRecords = [];
+  allStageRecords = [];
+  errorRows = [];
+  maxHourByDateCache.clear();
+
+  for (let i = 0; i < rawEscaneos.length; i++) {
+    const r = rawEscaneos[i];
+    const rowNum = i + 2;
+    const fechaObj = parseExcelDate(r[colFecha]);
+    const etapaRaw = String(r[colEtapa] || '').trim();
+    const etapa = norm(etapaRaw);
+    const empleadoParsed = parseEmpleadoField(r[colOperativo]);
+    const operativo = empleadoParsed.name || String(r[colOperativo] || '').trim();
+    const codOperativoDetalle = String((colCodOp ? r[colCodOp] : '') || empleadoParsed.code || '').trim();
+    const baseErr = {
+      fila: rowNum,
+      qr: r[colQR] || '',
+      etapa: etapaRaw,
+      estilo: r[colEstilo] || '',
+      idOperacion: r[colIdOp] || '',
+      operacion: r[colOpNom] || '',
+      operativo,
+      fechaRaw: fechaObj ? formatDateTime(fechaObj) : String(r[colFecha] || '')
+    };
+
+    // Omitir etapas excluidas antes de calcular y antes de generar botones/rankings.
+    if (etapaRaw && isExcludedStage(etapaRaw)) continue;
+
+    if (!fechaObj) { errorRows.push({...baseErr, motivo: 'Fecha inválida'}); continue; }
+    if (!etapaRaw) { errorRows.push({...baseErr, motivo: 'Etapa vacía'}); continue; }
+    if (!operativo) { errorRows.push({...baseErr, motivo: 'Operario vacío'}); continue; }
+    const hora = fechaObj.getHours();
+    if (hora < 6) { errorRows.push({...baseErr, motivo: 'Escaneo antes de las 6:00 AM'}); continue; }
+
+    // Guardar registro base para detectar etapas y días aunque después no encuentre SAM.
+    // Esto evita que el selector quede vacío si hay registros válidos en el detalle pero algún SAM falta.
+    allStageRecords.push({
+      fecha: formatDate(fechaObj),
+      fechaHora: fechaObj,
+      hora,
+      etapa: etapaRaw,
+      etapaNorm: etapa
+    });
+
+    let cantidad = parseNumber(r[colCantidad]);
+    if (isNaN(cantidad)) {
+      errorRows.push({...baseErr, motivo: 'Cantidad inválida o vacía (se usó 0)'});
+      cantidad = 0;
+    }
+
+    const estilo = norm(r[colEstilo]);
+    const idOp = normalizeId(r[colIdOp]);
+    const opNom = norm(r[colOpNom]);
+    let sam = null;
+    if (estilo && idOp && etapa) sam = samMap.byStyleIdStage.get(`${estilo}|${idOp}|${etapa}`) ?? null;
+    if (sam === null && estilo && idOp) sam = samMap.byStyleId.get(`${estilo}|${idOp}`) ?? null;
+    if (sam === null && estilo && opNom && etapa) sam = samMap.byStyleOpStage.get(`${estilo}|${opNom}|${etapa}`) ?? null;
+    if (sam === null && estilo && opNom) sam = samMap.byStyleOp.get(`${estilo}|${opNom}`) ?? null;
+
+    if (sam === null) { errorRows.push({...baseErr, motivo: 'SAM no encontrado'}); continue; }
+
+    // Si el marcaje viene grupal (varios códigos/nombres en la misma fila),
+    // se separa en operarios individuales. Cada operario conserva las operaciones,
+    // unidades y SAM del marcaje para que su eficiencia refleje todo lo realizado.
+    const people = explodeOperatorPeople(codOperativoDetalle, operativo);
+    people.forEach(person => {
+      validRecords.push({
+        fecha: formatDate(fechaObj),
+        fechaHora: fechaObj,
+        hora,
+        etapa: etapaRaw,
+        etapaNorm: etapa,
+        linea: String(r[colLinea] || '').trim(),
+        codOperativo: person.code || codOperativoDetalle,
+        operativo: person.name || operativo,
+        estilo: String(r[colEstilo] || '').trim(),
+        idOperacion: String(r[colIdOp] || '').trim(),
+        operacion: String(r[colOpNom] || '').trim(),
+        cantidad,
+        sam,
+        minutos: sam * cantidad,
+        qr: r[colQR] || ''
+      });
+    });
+  }
+
+  showLoading(true, 'Desplegando etapas...', 80);
+  await sleep(20);
+
+  buildDominantStageAssignments();
+  selectedStage = '';
+  selectedDate = '';
+  matrixRows = [];
+  renderStageButtons();
+  renderDayButtons();
+  clearDashboard();
+  renderErrorTable();
+  showLoading(false);
+  showMsg('success', `✅ Listo. Se detectaron ${stageList.length} etapas. Selecciona una etapa y luego un día.`);
+}
+
+function operatorDayKeyFromParts(fecha, codOperativo, operativo) {
+  return `${fecha}|${norm(codOperativo)}|${norm(operativo)}`;
+}
+function operatorDayKey(r) {
+  return operatorDayKeyFromParts(r.fecha, r.codOperativo, r.operativo);
+}
+function buildDominantStageAssignments() {
+  // Para cada operario y día se define UNA etapa principal.
+  // Si el operario tuvo marcajes en varias etapas, se conserva la etapa donde estuvo más tiempo.
+  // Tiempo = desde la primera hora marcada hasta la última hora marcada dentro de esa etapa.
+  dominantStageByOpDate = new Map();
+  const byOperatorDay = new Map();
+  validRecords.forEach(r => {
+    const key = operatorDayKey(r);
+    if (!byOperatorDay.has(key)) byOperatorDay.set(key, new Map());
+    const byStage = byOperatorDay.get(key);
+    const stageKey = r.etapa;
+    if (!byStage.has(stageKey)) {
+      byStage.set(stageKey, {
+        etapa: r.etapa,
+        etapaNorm: r.etapaNorm,
+        firstHour: r.hora,
+        lastHour: r.hora,
+        scans: 0,
+        minutes: 0
+      });
+    }
+    const st = byStage.get(stageKey);
+    st.firstHour = Math.min(st.firstHour, r.hora);
+    st.lastHour = Math.max(st.lastHour, r.hora);
+    st.scans += 1;
+    st.minutes += r.minutos;
+  });
+
+  byOperatorDay.forEach((byStage, key) => {
+    const stages = [...byStage.values()].map(st => ({
+      ...st,
+      laborHours: Math.max(1, st.lastHour - st.firstHour + 1)
+    }));
+    stages.sort((a, b) =>
+      (b.laborHours - a.laborHours) ||
+      (b.minutes - a.minutes) ||
+      (b.scans - a.scans) ||
+      a.etapa.localeCompare(b.etapa, 'es')
+    );
+    dominantStageByOpDate.set(key, stages[0]);
+  });
+}
+function isDominantRecord(r) {
+  const dominant = dominantStageByOpDate.get(operatorDayKey(r));
+  return dominant && dominant.etapa === r.etapa;
+}
+function renderStageButtons() {
+  const counts = new Map();
+  // Mostrar etapas desde el detalle de escaneos, no solo desde los registros con SAM.
+  // Así el selector no queda vacío cuando hay diferencias de SAM o se descartan registros después del cruce.
+  let stageRecords = allStageRecords.filter(r => !isExcludedStage(r.etapa));
+  if (!stageRecords.length) stageRecords = validRecords.filter(r => !isExcludedStage(r.etapa));
+  stageRecords.forEach(r => counts.set(r.etapa, (counts.get(r.etapa) || 0) + 1));
+  stageList = [...counts.keys()].filter(Boolean).sort((a,b) => a.localeCompare(b, 'es'));
+  const cont = document.getElementById('stageButtons');
+  if (!stageList.length) {
+    cont.innerHTML = '<div class="hint">No se detectaron etapas. Revisa que el detalle tenga una columna llamada Etapa, Area, Proceso o Fase y que no sean únicamente etapas omitidas.</div>';
+    return;
+  }
+  cont.innerHTML = stageList.map(stage => `
+    <button class="stage-btn ${stage === selectedStage ? 'active' : ''}" onclick="selectStage('${jsEsc(stage)}')">
+      ${esc(stage)}<span class="count">${counts.get(stage).toLocaleString()} escaneos</span>
+    </button>`).join('');
+}
+function jsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' '); }
+
+function isSetupStage(stage) {
+  const s = norm(stage || '');
+  return s.includes('troquel') || s.includes('estampad');
+}
+
+function updateSetupButtonVisibility() {
+  const btn = document.getElementById('btnSetupEff');
+  if (!btn) return;
+  const available = isSetupStage(selectedStage);
+  if (!available) showSetupEfficiency = false;
+  btn.classList.toggle('hidden', !available);
+  btn.textContent = showSetupEfficiency ? '✕ Quitar eficiencia set up' : '⚙ Eficiencia con set up';
+}
+
+function toggleSetupEfficiency() {
+  if (!isSetupStage(selectedStage)) return;
+  showSetupEfficiency = !showSetupEfficiency;
+  updateSetupButtonVisibility();
+  renderMatrixTable();
+}
+
+function selectStage(stage) {
+  selectedStage = stage;
+  selectedDate = '';
+  matrixRows = [];
+  if (!isSetupStage(stage)) showSetupEfficiency = false;
+  renderStageButtons();
+  renderDayButtons();
+  clearDashboard();
+  updateSetupButtonVisibility();
+  showMsg('info', `Etapa seleccionada: ${stage}. Ahora selecciona un día.`);
+}
+function renderDayButtons() {
+  const cont = document.getElementById('dayButtons');
+  document.getElementById('daySelectorTitle').textContent = selectedStage ? `Días disponibles para: ${selectedStage}` : 'Días disponibles para la etapa seleccionada';
+  if (!selectedStage) {
+    cont.innerHTML = '<div class="hint">Primero selecciona una etapa.</div>';
+    return;
+  }
+  let dayRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === selectedStage && isDominantRecord(r));
+  if (!dayRecords.length) dayRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === selectedStage);
+  if (!dayRecords.length) dayRecords = allStageRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === selectedStage);
+  const days = [...new Set(dayRecords.map(r => r.fecha))].sort();
+  if (!days.length) {
+    cont.innerHTML = '<div class="hint">Esta etapa no tiene días disponibles.</div>';
+    return;
+  }
+  cont.innerHTML = days.map(d => `
+    <button class="day-btn ${d === selectedDate ? 'active' : ''}" onclick="selectDay('${d}')">
+      ${dayName(d)}<span class="date">${formatDMY(d)}</span>
+    </button>`).join('');
+}
+function selectDay(dateStr) {
+  selectedDate = dateStr;
+  renderDayButtons();
+  calculateCurrentView();
+  renderKPIs();
+  renderRanking();
+  renderMatrixTable();
+  renderWeeklyWorstView();
+  renderCharts();
+  renderErrorTable();
+  showHourSummary();
+}
+
+function showHourSummary() {
+  const records = getCurrentRecords();
+  if (!records.length) return;
+  const counts = {};
+  records.forEach(r => { counts[r.hora] = (counts[r.hora] || 0) + 1; });
+  const displayHours = getCurrentDisplayHours();
+  const resumen = displayHours
+    .filter(h => counts[h])
+    .map(h => `${String(h).padStart(2,'0')}h: ${counts[h].toLocaleString()}`)
+    .join(' | ');
+  showMsg('info', `Horas detectadas para ${selectedStage} / ${formatDMY(selectedDate)}: ${resumen}`);
+}
+function getCurrentRecords() {
+  return validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === selectedStage && r.fecha === selectedDate && isDominantRecord(r));
+}
+function getCurrentErrors() {
+  return errorRows.filter(e => !isExcludedStage(e.etapa) && (!selectedStage || e.etapa === selectedStage) && (!selectedDate || String(e.fechaRaw || '').startsWith(selectedDate)));
+}
+function calculateCurrentView() {
+  matrixRows = buildMatrixRowsFor(selectedStage, selectedDate);
+}
+
+function buildMatrixRowsFor(stage, dateStr) {
+  let records = validRecords.filter(r =>
+    !isExcludedStage(r.etapa) &&
+    r.etapa === stage &&
+    r.fecha === dateStr &&
+    isDominantRecord(r)
+  );
+  // Fallback: si la etapa dominante no deja registros, usar todos los registros de esa etapa/día.
+  if (!records.length) {
+    records = validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === stage && r.fecha === dateStr);
+  }
+  const groups = new Map();
+  records.forEach(r => {
+    // Unifica al operario en UNA sola fila aunque marque en varias operaciones o líneas.
+    const opKey = `${norm(r.codOperativo)}|${norm(r.operativo)}`;
+    const key = opKey.trim() !== '|' ? opKey : norm(r.operativo);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        lineas: new Set(),
+        codigos: new Set(),
+        operativo: r.operativo,
+        totalUnits: 0,
+        totalMinutes: 0,
+        setupCount: 0,
+        setupMinutes: 0,
+        scans: 0,
+        operations: new Set(),
+        hours: {}
+      });
+    }
+    const g = groups.get(key);
+    if (r.linea) g.lineas.add(r.linea);
+    if (r.codOperativo) g.codigos.add(r.codOperativo);
+    if (!g.operativo && r.operativo) g.operativo = r.operativo;
+    g.totalUnits += r.cantidad;
+    g.totalMinutes += r.minutos;
+    g.scans += 1;
+    if (isSetupStage(stage) && Number(r.cantidad) === 0) {
+      g.setupCount += 1;
+      g.setupMinutes += 20;
+    }
+    if (r.operacion) g.operations.add(r.operacion);
+    if (!g.hours[r.hora]) g.hours[r.hora] = { units: 0, minutes: 0, scans: 0, operations: new Set(), lineas: new Set() };
+    g.hours[r.hora].units += r.cantidad;
+    g.hours[r.hora].minutes += r.minutos;
+    g.hours[r.hora].scans += 1;
+    if (r.operacion) g.hours[r.hora].operations.add(r.operacion);
+    if (r.linea) g.hours[r.hora].lineas.add(r.linea);
+  });
+
+  const displayHours = getDisplayHoursFor(records, dateStr);
+  return [...groups.values()].map(g => {
+    g.linea = [...g.lineas].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    g.codOperativo = [...g.codigos].sort((a,b) => String(a).localeCompare(String(b), 'es')).join(', ');
+    g.operaciones = [...g.operations].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    const markedHours = Object.keys(g.hours).map(Number);
+    g.maxHour = markedHours.length ? Math.max(...markedHours) : getStandardEndHour(dateStr);
+    const sharedLaborHours = getSharedLaborHoursForRecords(records, dateStr);
+    const standardEnd = getStandardEndHour(dateStr);
+    const individualExtraHours = Math.max(0, g.maxHour - standardEnd);
+    g.laborHours = sharedLaborHours + individualExtraHours;
+    g.extraHours = individualExtraHours;
+    g.totalMinutesSetup = g.totalMinutes + g.setupMinutes;
+    g.finalEff = (g.totalMinutes / (60 * g.laborHours)) * 100;
+    g.finalEffSetup = (g.totalMinutesSetup / (60 * g.laborHours)) * 100;
+    g.totalEff = g.finalEff;
+    displayHours.forEach(h => { if (g.hours[h]) g.hours[h].eff = (g.hours[h].minutes / 60) * 100; });
+    return g;
+  }).sort((a,b) => (a.finalEff - b.finalEff) || (a.operativo || '').localeCompare(b.operativo || '') || (a.linea || '').localeCompare(b.linea || ''));
+}
+function clearDashboard() {
+  ['kpiStage','kpiDay','kpiEff','kpiUnits','kpiMinutes','kpiScans','kpiNoSam','kpiTop'].forEach(id => document.getElementById(id).textContent = '—');
+  document.getElementById('kpiTopSub').textContent = 'Mayor eficiencia';
+  document.getElementById('mainTitle').textContent = 'Matriz de eficiencia por etapa / día · ordenada peor → mejor';
+  document.getElementById('mainThead').innerHTML = '';
+  document.getElementById('mainTbody').innerHTML = '<tr><td><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona una etapa y un día para ver la matriz por hora.</p></div></td></tr>';
+  const wr = document.getElementById('worstRanking');
+  const br = document.getElementById('bestRanking');
+  if (wr) wr.innerHTML = '<div class="rank-empty">Selecciona etapa y día para ver el ranking.</div>';
+  if (br) br.innerHTML = '<div class="rank-empty">Selecciona etapa y día para ver el ranking.</div>';
+  const dwt = document.getElementById('dailyWorstTbody');
+  if (dwt) dwt.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📉</div><p>Selecciona una etapa y un día para ver el top 5.</p></div></td></tr>';
+  const wwt = document.getElementById('weeklyWorstTbody');
+  if (wwt) wwt.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona un día para ver el acumulado semanal.</p></div></td></tr>';
+  const weeklyTitle = document.getElementById('weeklyWorstTitle');
+  if (weeklyTitle) weeklyTitle.textContent = 'Acumulado semanal · 5 peores operarios';
+  const wt = document.getElementById('worstControlTbody');
+  if (wt) wt.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📌</div><p>Selecciona una etapa para ver el control acumulado.</p></div></td></tr>';
+  const wthead = document.getElementById('worstControlThead');
+  if (wthead) wthead.innerHTML = '<tr><th>Operario</th><th>Cód. Operativo</th><th>Línea(s)</th><th>Operación(es)</th><th>Veces en 5 peores</th><th>Prom. cuando aparece</th></tr>';
+  const wtitle = document.getElementById('worstControlTitle');
+  if (wtitle) wtitle.textContent = 'Historial de operarios en los 5 peores';
+  const rt = document.getElementById('repeatWorstTbody');
+  if (rt) rt.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📌</div><p>Presiona el botón para ver los recurrentes de todas las etapas.</p></div></td></tr>';
+  const rtitle = document.getElementById('repeatWorstTitle');
+  if (rtitle) rtitle.textContent = 'Control 1-5 días en top 5 de peores';
+  const repeatSection = document.getElementById('repeatWorstSection');
+  if (repeatSection) repeatSection.classList.add('hidden');
+  updateSetupButtonVisibility();
+  if (chartHr) chartHr.destroy();
+  if (chartOp) chartOp.destroy();
+}
+
+function renderRanking() {
+  const bestEl = document.getElementById('bestRanking');
+  if (!bestEl) return;
+
+  if (!matrixRows.length) {
+    bestEl.innerHTML = '<div class="rank-empty">No hay operarios para la selección actual.</div>';
+    return;
+  }
+
+  const rankedAsc = [...matrixRows].sort((a,b) =>
+    (a.totalEff - b.totalEff) ||
+    (a.operativo || '').localeCompare(b.operativo || '') ||
+    (a.linea || '').localeCompare(b.linea || '')
+  );
+  const rankedDesc = [...rankedAsc].reverse();
+
+  bestEl.innerHTML = rankedDesc.slice(0, 5).map((r, idx) => renderRankRow(r, idx + 1)).join('');
+}
+
+function refreshWeeklyWorstStageFilter() {
+  const sel = document.getElementById('weeklyWorstStageFilter');
+  if (!sel) return;
+  const prev = weeklyWorstStageFilter || sel.value || '__ALL__';
+  const stages = (stageList && stageList.length ? [...stageList] : [...new Set(validRecords.map(r => r.etapa).filter(Boolean))])
+    .filter(stage => stage && !isExcludedStage(stage))
+    .sort((a,b) => a.localeCompare(b, 'es'));
+  sel.innerHTML = '<option value="__ALL__">Todas las etapas</option>' + stages.map(stage => `<option value="${esc(stage)}">${esc(stage)}</option>`).join('');
+  sel.value = [...sel.options].some(o => o.value === prev) ? prev : '__ALL__';
+  weeklyWorstStageFilter = sel.value;
+}
+
+function onWeeklyWorstFilterChange() {
+  const sel = document.getElementById('weeklyWorstStageFilter');
+  weeklyWorstStageFilter = sel ? sel.value : '__ALL__';
+  renderWeeklyWorstView();
+}
+
+function renderWeeklyWorstView() {
+  const tbody = document.getElementById('weeklyWorstTbody');
+  const title = document.getElementById('weeklyWorstTitle');
+  if (!tbody || !title) return;
+  refreshWeeklyWorstStageFilter();
+
+  if (!selectedDate) {
+    title.textContent = 'Acumulado semanal · 5 peores operarios';
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>Selecciona un día para ver el acumulado semanal.</p></div></td></tr>';
+    return;
+  }
+
+  const weekStart = getWeekStart(selectedDate);
+  const weekLabel = getWeekLabel(weekStart);
+  const selectedFilter = weeklyWorstStageFilter || '__ALL__';
+
+  const stages = (stageList && stageList.length ? [...stageList] : [...new Set(validRecords.map(r => r.etapa).filter(Boolean))])
+    .filter(stage => stage && !isExcludedStage(stage) && (selectedFilter === '__ALL__' || stage === selectedFilter))
+    .sort((a,b) => a.localeCompare(b, 'es'));
+
+  const days = [...new Set(validRecords
+    .filter(r => !isExcludedStage(r.etapa) && getWeekStart(r.fecha) === weekStart && weekdayIndex(r.fecha) >= 1 && weekdayIndex(r.fecha) <= 5)
+    .map(r => r.fecha))].sort();
+
+  const acc = new Map();
+
+  stages.forEach(stage => {
+    days.forEach(dateStr => {
+      const rows = buildMatrixRowsFor(stage, dateStr);
+      rows.forEach(r => {
+        const key = `${stage}|${norm(r.codOperativo)}|${norm(r.operativo)}`;
+        if (!acc.has(key)) {
+          acc.set(key, {
+            stage,
+            operativo: r.operativo,
+            codOperativo: r.codOperativo,
+            lineas: new Set(),
+            operaciones: new Set(),
+            entries: [],
+            byDay: {}
+          });
+        }
+        const item = acc.get(key);
+        String(r.linea || '').split('/').map(x => x.trim()).filter(Boolean).forEach(l => item.lineas.add(l));
+        String(r.operaciones || '').split('/').map(x => x.trim()).filter(Boolean).forEach(op => item.operaciones.add(op));
+        const wd = weekdayIndex(dateStr);
+        item.byDay[wd] = {
+          fecha: dateStr,
+          eficiencia: r.finalEff,
+          unidades: r.totalUnits,
+          minutos: r.totalMinutes
+        };
+        item.entries.push({
+          fecha: dateStr,
+          eficiencia: r.finalEff,
+          unidades: r.totalUnits,
+          minutos: r.totalMinutes
+        });
+      });
+    });
+  });
+
+  const result = [...acc.values()].map(item => {
+    item.count = item.entries.length;
+    item.avgEff = item.entries.reduce((s,e) => s + e.eficiencia, 0) / item.count;
+    item.linea = [...item.lineas].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    item.operacionesTxt = [...item.operaciones].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    return item;
+  }).filter(item => item.count > 0)
+    .sort((a,b) => (a.avgEff - b.avgEff) || a.stage.localeCompare(b.stage, 'es') || a.operativo.localeCompare(b.operativo, 'es'))
+    .slice(0, 5);
+
+  title.textContent = `Acumulado semanal · ${weekLabel} · ${selectedFilter === '__ALL__' ? 'todas las etapas' : selectedFilter}`;
+
+  if (!result.length) {
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>No hay datos acumulados para la semana seleccionada.</p></div></td></tr>';
+    return;
+  }
+
+  const renderDayCells = item => [1,2,3,4,5].map(wd => {
+    const entry = item.byDay[wd];
+    if (!entry) return '<td class="weekly-day-cell"><span class="day-empty">—</span></td>';
+    return `<td class="weekly-day-cell" title="${formatDMY(entry.fecha)} · Unidades: ${Math.round(entry.unidades).toLocaleString()} · Minutos: ${entry.minutos.toFixed(2)}"><span class="day-eff-badge ${badgeClass(entry.eficiencia)}">${entry.eficiencia.toFixed(2)}%</span></td>`;
+  }).join('');
+
+  tbody.innerHTML = result.map((item, idx) => `<tr>
+    <td class="center rank-index-cell">#${idx + 1}</td>
+    <td class="left">${esc(item.stage)}</td>
+    <td class="left">${esc(item.operativo)}</td>
+    <td class="mono center">${esc(item.codOperativo)}</td>
+    <td class="left">${esc(item.linea)}</td>
+    <td class="left operations-col" title="${esc(item.operacionesTxt)}">${esc(item.operacionesTxt || '—')}</td>
+    <td class="center"><span class="history-count">${item.count}</span></td>
+    <td class="center"><span class="badge-eff ${badgeClass(item.avgEff)}">${item.avgEff.toFixed(2)}%</span></td>
+    ${renderDayCells(item)}
+  </tr>`).join('');
+}
+
+
+function renderRankRow(r, position) {
+  const cls = badgeClass(r.totalEff).replace('badge-', '');
+  const effStyle = cls === 'green' ? 'background:#2f8f63;color:#ffffff;' : cls === 'yellow' ? 'background:#c69214;color:#ffffff;' : 'background:#a12631;color:#ffffff;';
+  return `<div class="rank-row">
+    <div class="rank-pos">#${position}</div>
+    <div>
+      <div class="rank-name">${esc(r.operativo)}</div>
+      <div class="rank-meta">${esc(r.linea)} · Cód. ${esc(r.codOperativo)} · Und: ${Math.round(r.totalUnits).toLocaleString()} · Min: ${r.totalMinutes.toFixed(2)} · Hrs calc.: ${r.laborHours}${r.extraHours ? ` (+${r.extraHours} extra)` : ''}</div>
+    </div>
+    <div class="rank-eff" style="${effStyle}">${r.totalEff.toFixed(2)}%</div>
+  </div>`;
+}
+
+
+function getHistoryVisibleStages() {
+  const source = stageList && stageList.length ? [...stageList] : [...new Set(validRecords.map(r => r.etapa).filter(Boolean))];
+  return source.filter(stage => stage && !isExcludedStage(stage)).sort((a,b) => a.localeCompare(b, 'es'));
+}
+
+function refreshHistoryStageOptions() {
+  const sel = document.getElementById('historyStageSelect');
+  if (!sel) return;
+  const prev = historyStageFilter || sel.value || '';
+  const stages = getHistoryVisibleStages();
+  let html = '<option value="">Etapa seleccionada</option><option value="__ALL__">Todas las etapas</option>';
+  html += stages.map(stage => `<option value="${esc(stage)}">${esc(stage)}</option>`).join('');
+  sel.innerHTML = html;
+  const exists = [...sel.options].some(o => o.value === prev);
+  sel.value = exists ? prev : (selectedStage && stages.includes(selectedStage) ? selectedStage : '');
+  historyStageFilter = sel.value;
+}
+
+function onHistoryFilterChange() {
+  const input = document.getElementById('historySearchInput');
+  const sel = document.getElementById('historyStageSelect');
+  historySearchTerm = norm(input ? input.value : '');
+  historyStageFilter = sel ? sel.value : '';
+  renderWorstControl();
+  const repeatSec = document.getElementById('repeatWorstSection');
+  if (repeatSec && !repeatSec.classList.contains('hidden')) renderRepeatWorstControl();
+}
+
+function matchesHistorySearch(item) {
+  if (!historySearchTerm) return true;
+  const hay = [item.operativo, item.codOperativo, item.linea, item.stage].map(v => norm(v)).join(' | ');
+  return hay.includes(historySearchTerm);
+}
+
+function renderWorstControl() {
+  const tbody = document.getElementById('worstControlTbody');
+  const thead = document.getElementById('worstControlThead');
+  const title = document.getElementById('worstControlTitle');
+  if (!tbody || !thead || !title) return;
+
+  const baseHeader = '<tr><th class="base-col">Operario</th><th class="base-col">Cód. Operativo</th><th class="base-col">Línea(s)</th><th>Operación(es)</th><th>Veces en 5 peores</th><th>Prom. cuando aparece</th></tr>';
+
+  refreshHistoryStageOptions();
+  const stages = getHistoryVisibleStages();
+  const effectiveStage = historyStageFilter === '__ALL__' ? '__ALL__' : (historyStageFilter || selectedStage || stages[0] || '');
+
+  if (!effectiveStage) {
+    title.textContent = 'Historial de operarios en los 5 peores';
+    thead.innerHTML = baseHeader;
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📌</div><p>No se encontraron etapas disponibles.</p></div></td></tr>';
+    return;
+  }
+
+  let dayRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && (effectiveStage === '__ALL__' || r.etapa === effectiveStage) && isDominantRecord(r));
+  if (!dayRecords.length) dayRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && (effectiveStage === '__ALL__' || r.etapa === effectiveStage));
+  const days = [...new Set(dayRecords.map(r => r.fecha))].sort();
+
+  const acc = new Map();
+  days.forEach(dateStr => {
+    const stageForDay = effectiveStage === '__ALL__' ? (selectedStage || stages[0] || '') : effectiveStage;
+    const rows = buildMatrixRowsFor(stageForDay, dateStr);
+    rows.slice(0, 5).forEach(r => {
+      const key = `${norm(r.codOperativo)}|${norm(r.operativo)}`;
+      if (!acc.has(key)) {
+        acc.set(key, {
+          operativo: r.operativo,
+          codOperativo: r.codOperativo,
+          stage: r.etapa || '',
+          lineas: new Set(),
+          operaciones: new Set(),
+          byDay: {},
+          entries: []
+        });
+      }
+      const item = acc.get(key);
+      String(r.linea || '').split('/').map(x => x.trim()).filter(Boolean).forEach(l => item.lineas.add(l));
+      String(r.operaciones || '').split('/').map(x => x.trim()).filter(Boolean).forEach(op => item.operaciones.add(op));
+      item.byDay[dateStr] = {
+        eficiencia: r.finalEff,
+        unidades: r.totalUnits,
+        minutos: r.totalMinutes
+      };
+      item.entries.push({
+        fecha: dateStr,
+        dia: dayName(dateStr),
+        eficiencia: r.finalEff,
+        unidades: r.totalUnits,
+        minutos: r.totalMinutes
+      });
+    });
+  });
+
+  const list = [...acc.values()].map(item => {
+    item.count = item.entries.length;
+    item.avgEff = item.entries.reduce((s,e) => s + e.eficiencia, 0) / item.entries.length;
+    item.minEff = Math.min(...item.entries.map(e => e.eficiencia));
+    item.linea = [...item.lineas].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    item.operaciones = [...item.operaciones].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    return item;
+  }).filter(matchesHistorySearch).sort((a,b) => (b.count - a.count) || (a.avgEff - b.avgEff) || a.operativo.localeCompare(b.operativo, 'es'));
+
+  title.textContent = `Historial de operarios en los 5 peores · ${effectiveStage === '__ALL__' ? 'todas las etapas' : effectiveStage}`;
+  thead.innerHTML = `<tr>
+    <th class="base-col">Operario</th>
+    <th class="base-col">Cód. Operativo</th>
+    <th class="base-col">Línea(s)</th>
+    <th>Operación(es)</th>
+    <th>Veces en 5 peores</th>
+    <th>Prom. cuando aparece</th>
+    ${days.map(d => `<th class="day-col">${dayName(d)}<br><span style="font-size:10px;font-weight:500">${formatDMY(d)}</span></th>`).join('')}
+  </tr>`;
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="${6 + days.length}"><div class="empty-state"><div class="empty-icon">📌</div><p>No hay historial de peores para esta etapa.</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(item => {
+    const dayCells = days.map(d => {
+      const entry = item.byDay[d];
+      if (!entry) return '<td class="day-cell"><span class="day-empty">—</span></td>';
+      return `<td class="day-cell" title="Unidades: ${Math.round(entry.unidades).toLocaleString()} · Minutos: ${entry.minutos.toFixed(2)}">
+        <span class="day-eff-badge ${badgeClass(entry.eficiencia)}">${entry.eficiencia.toFixed(2)}%</span>
+      </td>`;
+    }).join('');
+    return `<tr>
+      <td class="left">${esc(item.operativo)}</td>
+      <td class="mono center">${esc(item.codOperativo)}</td>
+      <td class="left">${esc(item.linea)}</td>
+      <td class="left operations-col" title="${esc(item.operaciones)}">${esc(item.operaciones || '—')}</td>
+      <td class="center"><span class="history-count">${item.count}</span></td>
+      <td class="center"><span class="badge-eff ${badgeClass(item.avgEff)}">${item.avgEff.toFixed(2)}%</span></td>
+      ${dayCells}
+    </tr>`;
+  }).join('');
+}
+
+function toggleRepeatWorstView() {
+  const sec = document.getElementById('repeatWorstSection');
+  if (!sec) return;
+  const willShow = sec.classList.contains('hidden');
+  sec.classList.toggle('hidden', !willShow);
+  if (willShow) {
+    renderRepeatWorstControl();
+    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function getWeekStart(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const day = date.getDay(); // 0 domingo, 1 lunes...
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return formatDate(date);
+}
+
+function getWeekLabel(weekStart) {
+  const [y, m, d] = weekStart.split('-').map(Number);
+  const monday = new Date(y, m - 1, d);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return `${formatDMY(formatDate(monday))} - ${formatDMY(formatDate(friday))}`;
+}
+
+function weekdayIndex(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).getDay();
+}
+
+function renderRepeatWorstControl() {
+  const tbody = document.getElementById('repeatWorstTbody');
+  const thead = document.getElementById('repeatWorstThead');
+  const title = document.getElementById('repeatWorstTitle');
+  const progressTbody = document.getElementById('progressWorstTbody');
+  const progressThead = document.getElementById('progressWorstThead');
+  if (!tbody || !thead || !title) return;
+
+  const headerHtml = '<tr><th>Grupo</th><th>Semana</th><th>Etapa</th><th>Operario</th><th>Cód. Operativo</th><th>Línea(s)</th><th>Veces</th><th>Promedio eficiencia</th><th class="day-col">Lunes</th><th class="day-col">Martes</th><th class="day-col">Miércoles</th><th class="day-col">Jueves</th><th class="day-col">Viernes</th></tr>';
+  thead.innerHTML = headerHtml;
+  if (progressThead) progressThead.innerHTML = '<tr><th>Semana</th><th>Etapa</th><th>Acumulado hasta</th><th>Operario</th><th>Cód. Operativo</th><th>Línea(s)</th><th>Días en top 5</th><th>Promedio eficiencia</th><th class="day-col">Lunes</th><th class="day-col">Martes</th><th class="day-col">Miércoles</th><th class="day-col">Jueves</th><th class="day-col">Viernes</th></tr>';
+  title.textContent = `Control 1-5 días en top 5 de peores · ${historyStageFilter && historyStageFilter !== '__ALL__' ? historyStageFilter : 'todas las etapas'}`;
+
+  refreshHistoryStageOptions();
+  let stages = getHistoryVisibleStages();
+  if (historyStageFilter && historyStageFilter !== '__ALL__') stages = stages.filter(stage => stage === historyStageFilter);
+
+  if (!stages.length) {
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📌</div><p>Procesa los datos para ver el control por semana.</p></div></td></tr>';
+    if (progressTbody) progressTbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>Procesa los datos para ver el acumulado progresivo.</p></div></td></tr>';
+    return;
+  }
+
+  function buildStageWeekData() {
+    const weeksData = [];
+    stages.forEach(stage => {
+      let stageRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === stage && isDominantRecord(r));
+      if (!stageRecords.length) stageRecords = validRecords.filter(r => !isExcludedStage(r.etapa) && r.etapa === stage);
+
+      const days = [...new Set(stageRecords.map(r => r.fecha))]
+        .filter(d => weekdayIndex(d) >= 1 && weekdayIndex(d) <= 5)
+        .sort();
+
+      const weeks = new Map();
+      days.forEach(d => {
+        const wk = getWeekStart(d);
+        if (!weeks.has(wk)) weeks.set(wk, []);
+        weeks.get(wk).push(d);
+      });
+
+      weeks.forEach((weekDays, weekStart) => {
+        const sortedDays = weekDays.sort();
+        const topByDay = {};
+        sortedDays.forEach(dateStr => {
+          topByDay[dateStr] = buildMatrixRowsFor(stage, dateStr).slice(0, 5);
+        });
+        weeksData.push({ stage, weekStart, weekLabel: getWeekLabel(weekStart), days: sortedDays, topByDay });
+      });
+    });
+    return weeksData;
+  }
+
+  function addRowToAccumulator(acc, stage, weekStart, weekLabel, dateStr, r) {
+    const key = `${stage}|${norm(r.codOperativo)}|${norm(r.operativo)}`;
+    if (!acc.has(key)) {
+      acc.set(key, {
+        stage,
+        weekStart,
+        weekLabel,
+        operativo: r.operativo,
+        codOperativo: r.codOperativo,
+        lineas: new Set(),
+        byDay: {},
+        entries: []
+      });
+    }
+    const item = acc.get(key);
+    String(r.linea || '').split('/').map(x => x.trim()).filter(Boolean).forEach(l => item.lineas.add(l));
+    const wd = weekdayIndex(dateStr);
+    item.byDay[wd] = {
+      fecha: dateStr,
+      eficiencia: r.finalEff,
+      unidades: r.totalUnits,
+      minutos: r.totalMinutes
+    };
+    item.entries.push({
+      fecha: dateStr,
+      eficiencia: r.finalEff,
+      unidades: r.totalUnits,
+      minutos: r.totalMinutes
+    });
+  }
+
+  function finalizeItem(item) {
+    item.count = item.entries.length;
+    item.group = `${item.count} día${item.count === 1 ? '' : 's'}`;
+    item.sumEff = item.entries.reduce((s,e) => s + e.eficiencia, 0);
+    item.avgEff = item.sumEff / item.count;
+    item.linea = [...item.lineas].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    item.operaciones = [...item.operaciones].sort((a,b) => a.localeCompare(b, 'es')).join(' / ');
+    return item;
+  }
+
+  function renderDayCells(item) {
+    return [1,2,3,4,5].map(wd => {
+      const entry = item.byDay[wd];
+      if (!entry) return '<td class="day-cell"><span class="day-empty">—</span></td>';
+      return `<td class="day-cell" title="${formatDMY(entry.fecha)} · Unidades: ${Math.round(entry.unidades).toLocaleString()} · Minutos: ${entry.minutos.toFixed(2)}">
+        <span class="day-eff-badge ${badgeClass(entry.eficiencia)}">${entry.eficiencia.toFixed(2)}%</span>
+      </td>`;
+    }).join('');
+  }
+
+  const weeksData = buildStageWeekData();
+  const result = [];
+
+  weeksData.forEach(({stage, weekStart, weekLabel, days, topByDay}) => {
+    const acc = new Map();
+    days.forEach(dateStr => {
+      (topByDay[dateStr] || []).forEach(r => addRowToAccumulator(acc, stage, weekStart, weekLabel, dateStr, r));
+    });
+    acc.forEach(item => {
+      finalizeItem(item);
+      if (item.count >= 1 && item.count <= 5) result.push(item);
+    });
+  });
+
+  const filteredResult = result.filter(matchesHistorySearch);
+
+  filteredResult.sort((a,b) =>
+    (b.count - a.count) ||
+    (a.avgEff - b.avgEff) ||
+    a.stage.localeCompare(b.stage, 'es') ||
+    a.operativo.localeCompare(b.operativo, 'es')
+  );
+
+  if (!filteredResult.length) {
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">✅</div><p>No hay operarios en el top 5 de peores para las semanas disponibles.</p></div></td></tr>';
+  } else {
+    const renderRow = item => `<tr>
+      <td class="center"><span class="history-count">${item.group}</span></td>
+      <td class="mono center">${esc(item.weekLabel)}</td>
+      <td class="left">${esc(item.stage)}</td>
+      <td class="left">${esc(item.operativo)}</td>
+      <td class="mono center">${esc(item.codOperativo)}</td>
+      <td class="left">${esc(item.linea)}</td>
+      <td class="left operations-col" title="${esc(item.operaciones)}">${esc(item.operaciones || '—')}</td>
+      <td class="center"><span class="history-count">${item.count}</span></td>
+      <td class="center"><span class="badge-eff ${badgeClass(item.avgEff)}">${item.avgEff.toFixed(2)}%</span></td>
+      ${renderDayCells(item)}
+    </tr>`;
+
+    const groupRow = (label, count) => `<tr><td colspan="13" style="background:rgba(0,229,255,0.08);color:var(--accent);font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${label} · ${count} operario(s)</td></tr>`;
+    const blocks = [];
+    [5,4,3,2,1].forEach(n => {
+      const items = filteredResult.filter(x => x.count === n).sort((a,b) => (a.avgEff - b.avgEff) || a.operativo.localeCompare(b.operativo, 'es'));
+      blocks.push(groupRow(`Grupo de ${n} día${n === 1 ? '' : 's'} en top 5`, items.length));
+      blocks.push(...(items.length ? items.map(renderRow) : [`<tr><td colspan="13" class="center"><span class="day-empty">Sin operarios en este grupo</span></td></tr>`]));
+    });
+    tbody.innerHTML = blocks.join('');
+  }
+
+  // Tabla acumulada progresiva: top 5 acumulado al cierre de cada día disponible de la semana.
+  if (!progressTbody) return;
+  const progressiveRows = [];
+  weeksData.forEach(({stage, weekStart, weekLabel, days, topByDay}) => {
+    const sortedDays = days.sort();
+    sortedDays.forEach(cutoffDate => {
+      const cutoffWd = weekdayIndex(cutoffDate);
+      const acc = new Map();
+      sortedDays.filter(d => d <= cutoffDate).forEach(dateStr => {
+        (topByDay[dateStr] || []).forEach(r => addRowToAccumulator(acc, stage, weekStart, weekLabel, dateStr, r));
+      });
+      const topAccum = [...acc.values()]
+        .map(finalizeItem)
+        .sort((a,b) => (a.avgEff - b.avgEff) || a.operativo.localeCompare(b.operativo, 'es'))
+        .slice(0, 5);
+      topAccum.forEach((item, idx) => {
+        progressiveRows.push({ ...item, cutoffDate, cutoffWd, cutoffLabel: `${dayName(cutoffDate)} ${formatDMY(cutoffDate)}`, rank: idx + 1 });
+      });
+    });
+  });
+
+  const filteredProgressiveRows = progressiveRows.filter(matchesHistorySearch);
+
+  if (!filteredProgressiveRows.length) {
+    progressTbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="empty-icon">📊</div><p>No hay datos para el acumulado progresivo.</p></div></td></tr>';
+    return;
+  }
+
+  filteredProgressiveRows.sort((a,b) =>
+    a.weekStart.localeCompare(b.weekStart) ||
+    a.stage.localeCompare(b.stage, 'es') ||
+    (a.cutoffWd - b.cutoffWd) ||
+    (a.avgEff - b.avgEff) ||
+    a.operativo.localeCompare(b.operativo, 'es')
+  );
+
+  let lastGroup = '';
+  const rowsHtml = [];
+  filteredProgressiveRows.forEach(item => {
+    const groupKey = `${item.weekLabel}|${item.stage}|${item.cutoffLabel}`;
+    if (groupKey !== lastGroup) {
+      lastGroup = groupKey;
+      rowsHtml.push(`<tr><td colspan="13" style="background:rgba(245,158,11,0.08);color:#fde68a;font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.08em;">${esc(item.stage)} · ${esc(item.weekLabel)} · acumulado hasta ${esc(item.cutoffLabel)}</td></tr>`);
+    }
+    rowsHtml.push(`<tr>
+      <td class="mono center">${esc(item.weekLabel)}</td>
+      <td class="left">${esc(item.stage)}</td>
+      <td class="center"><span class="history-count">#${item.rank} · ${esc(item.cutoffLabel)}</span></td>
+      <td class="left">${esc(item.operativo)}</td>
+      <td class="mono center">${esc(item.codOperativo)}</td>
+      <td class="left">${esc(item.linea)}</td>
+      <td class="left operations-col" title="${esc(item.operaciones)}">${esc(item.operaciones || '—')}</td>
+      <td class="center"><span class="history-count">${item.count}</span></td>
+      <td class="center"><span class="badge-eff ${badgeClass(item.avgEff)}">${item.avgEff.toFixed(2)}%</span></td>
+      ${renderDayCells(item)}
+    </tr>`);
+  });
+  progressTbody.innerHTML = rowsHtml.join('');
+}
+
+function renderKPIs() {
+  const records = getCurrentRecords();
+  const totalUnits = records.reduce((s,r) => s + r.cantidad, 0);
+  const totalMinutes = records.reduce((s,r) => s + r.minutos, 0);
+  const avgEff = matrixRows.length ? (matrixRows.reduce((s,r) => s + r.totalEff, 0) / matrixRows.length) : 0;
+  const noSam = getCurrentErrors().filter(e => e.motivo === 'SAM no encontrado').length;
+  let top = null;
+  matrixRows.forEach(r => { if (!top || r.totalEff > top.totalEff) top = r; });
+
+  document.getElementById('kpiStage').textContent = selectedStage || '—';
+  document.getElementById('kpiDay').textContent = selectedDate ? `${dayName(selectedDate)} ${formatDMY(selectedDate)}` : '—';
+  document.getElementById('kpiEff').textContent = matrixRows.length ? avgEff.toFixed(1) + '%' : '—';
+  document.getElementById('kpiUnits').textContent = totalUnits ? Math.round(totalUnits).toLocaleString() : '0';
+  document.getElementById('kpiMinutes').textContent = totalMinutes ? totalMinutes.toFixed(1) : '0';
+  document.getElementById('kpiScans').textContent = records.length.toLocaleString();
+  document.getElementById('kpiNoSam').textContent = noSam.toLocaleString();
+  document.getElementById('kpiTop').textContent = top ? top.operativo : '—';
+  document.getElementById('kpiTopSub').textContent = top ? `${top.totalEff.toFixed(1)}%` : 'Mayor eficiencia';
+}
+function effClass(eff) { return eff >= 75 ? 'eff-green' : eff >= 60 ? 'eff-yellow' : 'eff-red'; }
+function badgeClass(eff) { return eff >= 75 ? 'badge-green' : eff >= 60 ? 'badge-yellow' : 'badge-red'; }
+function renderMatrixTable() {
+  updateSetupButtonVisibility();
+  const showSetup = showSetupEfficiency && isSetupStage(selectedStage);
+  document.getElementById('mainTitle').textContent = `${selectedStage} - ${dayName(selectedDate)} ${formatDMY(selectedDate)} - eficiencia por hora · operarios unificados por código/nombre · ordenada por eficiencia final menor → mayor`;
+  document.getElementById('mainThead').innerHTML = `<tr>
+    <th class="sticky-col">Línea</th><th class="sticky-col-2">Cód. Operativo</th><th class="sticky-col-3">Operativo</th><th>Operación(es)</th>
+    <th class="col-units">Total Und.</th><th class="col-minutes">Min. Ganados</th>
+    ${HOURS.map(h => `<th>${String(h).padStart(2,'0')}h</th>`).join('')}
+    <th class="col-labor">Horas Calc.</th><th class="col-eff-final">Eficiencia Final</th>
+    ${showSetup ? '<th class="col-eff-final">Eficiencia Set Up</th>' : ''}
+  </tr>`;
+  const tbody = document.getElementById('mainTbody');
+  if (!matrixRows.length) {
+    tbody.innerHTML = `<tr><td colspan="${(showSetup ? 9 : 8) + HOURS.length}"><div class="empty-state"><div class="empty-icon">🔍</div><p>No hay registros para esta etapa y día después de unificar por etapa dominante.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = matrixRows.map(r => `
+    <tr>
+      <td class="mono sticky-col center">${esc(r.linea)}</td>
+      <td class="mono sticky-col-2 center">${esc(r.codOperativo)}</td>
+      <td class="sticky-col-3 left">${esc(r.operativo)}</td>
+      <td class="left operations-col" title="${esc(r.operaciones)}">${esc(r.operaciones || '—')}</td>
+      <td class="mono center col-units">${Math.round(r.totalUnits).toLocaleString()}</td>
+      <td class="mono center col-minutes">${r.totalMinutes.toFixed(2)}</td>
+      ${HOURS.map(h => renderHourCell(r.hours[h])).join('')}
+      <td class="mono center col-labor" title="Horas comunes según avance general del día hasta cierre normal. Después del cierre, las horas extra se suman individualmente. Almuerzo descontado desde 13h.">${r.laborHours}</td>
+      <td class="center col-eff-final"><span class="badge-eff ${badgeClass(r.finalEff)}">${r.finalEff.toFixed(2)}%</span></td>
+      ${showSetup ? `<td class="center col-eff-final">
+        <span class="badge-eff ${badgeClass(r.finalEffSetup)}">${r.finalEffSetup.toFixed(2)}%</span>
+        <div class="eff-sub">Set ups: ${r.setupCount}</div>
+        <div class="eff-sub">+${r.setupMinutes} min</div>
+      </td>` : ''}
+    </tr>`).join('');
+}
+function renderHourCell(h) {
+  if (!h) return '<td class="center hour-empty">—</td>';
+  return `<td><div class="hour-cell ${effClass(h.eff)}"><div class="eff-main">${h.eff.toFixed(2)}%</div><div class="eff-sub">Und: ${Math.round(h.units).toLocaleString()}</div><div class="eff-sub">Min: ${h.minutes.toFixed(2)}</div></div></td>`;
+}
+function renderErrorTable() {
+  const rows = getCurrentErrors();
+  document.getElementById('errorTableTitle').textContent = `⚠ Registros excluidos (${rows.length})`;
+  const tbody = document.getElementById('errorTbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">✅</div><p>Sin registros con problemas para la selección actual</p></div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(e => `<tr>
+    <td class="mono center">${e.fila}</td><td class="mono center">${esc(e.qr)}</td><td>${esc(e.etapa)}</td><td>${esc(e.estilo)}</td>
+    <td class="mono center">${esc(e.idOperacion)}</td><td>${esc(e.operacion)}</td><td>${esc(e.operativo)}</td><td class="mono center">${esc(e.fechaRaw)}</td>
+    <td><span class="badge-eff badge-red">${esc(e.motivo)}</span></td></tr>`).join('');
+}
+function renderCharts() { if (document.getElementById('chartOperario')) renderChartOperario(); }
+function renderChartHora() {
+  if (!document.getElementById('chartHora')) return;
+  const byHour = {};
+  const displayHours = getCurrentDisplayHours();
+  displayHours.forEach(h => byHour[h] = { minutes: 0, units: 0 });
+  getCurrentRecords().forEach(r => { if (byHour[r.hora]) { byHour[r.hora].minutes += r.minutos; byHour[r.hora].units += r.cantidad; } });
+  const labels = displayHours.map(h => `${String(h).padStart(2,'0')}h`);
+  const data = displayHours.map(h => parseFloat(((byHour[h].minutes / 60) * 100).toFixed(2)));
+  const colors = data.map(v => v >= 75 ? 'rgba(16,185,129,0.75)' : v >= 60 ? 'rgba(245,158,11,0.75)' : 'rgba(239,68,68,0.75)');
+  if (chartHr) chartHr.destroy();
+  chartHr = new Chart(document.getElementById('chartHora').getContext('2d'), { type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] }, options: chartOptions() });
+}
+function renderChartOperario() {
+  const labels = matrixRows.map(r => r.operativo);
+  const data = matrixRows.map(r => parseFloat(r.totalEff.toFixed(2)));
+  const colors = data.map(v => v >= 75 ? 'rgba(16,185,129,0.75)' : v >= 60 ? 'rgba(245,158,11,0.75)' : 'rgba(239,68,68,0.75)');
+  if (chartOp) chartOp.destroy();
+  chartOp = new Chart(document.getElementById('chartOperario').getContext('2d'), { type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4 }] }, options: chartOptions() });
+}
+function chartOptions() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#ffffff', borderColor: '#d7dbe0', borderWidth: 1, titleColor: '#a12631', bodyColor: '#2f3540', callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)}%` } } },
+    scales: { x: { ticks: { color: '#6f7782', font: { family: 'Space Mono', size: 10 }, maxRotation: 45 }, grid: { color: '#e5e8ed' } }, y: { ticks: { color: '#6f7782', font: { family: 'Space Mono', size: 10 }, callback: v => v + '%' }, grid: { color: '#e5e8ed' }, suggestedMin: 0 } }
+  };
+}
+
+function toggleMainTableFullscreen() {
+  const card = document.getElementById('mainMatrixCard');
+  const btn = document.getElementById('btnFullscreenMatrix');
+  if (!card || !btn) return;
+  const isFull = card.classList.toggle('fullscreen-view');
+  document.body.classList.toggle('matrix-fullscreen-active', isFull);
+  btn.classList.toggle('btn-fullscreen-active', isFull);
+  btn.textContent = isFull ? '✕ Salir pantalla completa' : '⛶ Pantalla completa';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const card = document.getElementById('mainMatrixCard');
+    const btn = document.getElementById('btnFullscreenMatrix');
+    if (card && card.classList.contains('fullscreen-view')) {
+      card.classList.remove('fullscreen-view');
+      document.body.classList.remove('matrix-fullscreen-active');
+      if (btn) {
+        btn.classList.remove('btn-fullscreen-active');
+        btn.textContent = '⛶ Pantalla completa';
+      }
+    }
+  }
+});
+
+function exportCSV(type) {
+  let headers = [], rows = [], filename = '';
+  if (type === 'main') {
+    const displayHours = getCurrentDisplayHours();
+    const includeSetup = showSetupEfficiency && isSetupStage(selectedStage);
+    headers = ['Etapa','Fecha','Linea','Cod Operativo','Operativo','Operaciones','Total Unidades','Minutos Ganados','Horas Calculadas','Horas Extra','Eficiencia Final %'];
+    if (includeSetup) headers.push('Set Ups','Minutos Set Up','Minutos con Set Up','Eficiencia Set Up %');
+    headers.push(...displayHours.map(h => `${String(h).padStart(2,'0')}h Eff %`), ...displayHours.map(h => `${String(h).padStart(2,'0')}h Unidades`), ...displayHours.map(h => `${String(h).padStart(2,'0')}h Minutos`));
+    rows = matrixRows.map(r => {
+      const base = [selectedStage, selectedDate, r.linea, r.codOperativo, r.operativo, r.operaciones || '', Math.round(r.totalUnits), r.totalMinutes.toFixed(4), r.laborHours, r.extraHours || 0, r.finalEff.toFixed(2)];
+      if (includeSetup) base.push(r.setupCount || 0, r.setupMinutes || 0, (r.totalMinutesSetup || r.totalMinutes).toFixed(4), (r.finalEffSetup || r.finalEff).toFixed(2));
+      return [...base, ...displayHours.map(h => r.hours[h] ? r.hours[h].eff.toFixed(2) : ''), ...displayHours.map(h => r.hours[h] ? Math.round(r.hours[h].units) : ''), ...displayHours.map(h => r.hours[h] ? r.hours[h].minutes.toFixed(4) : '')];
+    });
+    filename = `eficiencia_${selectedStage || 'etapa'}_${selectedDate || 'dia'}.csv`.replace(/[^a-z0-9_\-.]+/gi, '_');
+  } else {
+    const errs = getCurrentErrors();
+    headers = ['Fila','QR','Etapa','Estilo','ID Operacion','Operacion','Operativo','Fecha Escaneo','Motivo'];
+    rows = errs.map(e => [e.fila, e.qr, e.etapa, e.estilo, e.idOperacion, e.operacion, e.operativo, e.fechaRaw, e.motivo]);
+    filename = 'registros_errores.csv';
+  }
+  const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+function csvCell(v) { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function showMsg(type, text) {
+  const el = document.getElementById('msgBox');
+  el.className = `message ${type} show`;
+  el.textContent = text;
+  if (type === 'success' || type === 'info') setTimeout(() => el.classList.remove('show'), 7000);
+}
+function showLoading(show, text = 'Procesando...', pct = 0) {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('loadingOverlay').classList.toggle('show', show);
+}
+</script>
+</body>
+</html>
